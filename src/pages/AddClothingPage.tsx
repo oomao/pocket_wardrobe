@@ -82,17 +82,35 @@ export default function AddClothingPage() {
 
       {step === 'idle' && (
         <div className="bg-white p-6 rounded-lg border border-gray-200">
-          <p className="text-sm text-gray-600 mb-3">
-            請選擇一張衣服照片，系統會自動進行 AI 去背（首次載入需下載模型約 40MB）。
+          <p className="text-sm text-gray-600 mb-4">
+            請選擇一張衣服照片，系統會自動進行 AI 去背（首次載入需下載模型約 24MB）。
           </p>
-          <input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onChange={handleFile}
-            className="block"
-          />
-          {errorMsg && <p className="text-red-500 text-sm mt-2">{errorMsg}</p>}
+          <div className="grid sm:grid-cols-2 gap-3">
+            <label className="flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-brand-500 hover:bg-brand-50 transition">
+              <span className="text-4xl">📷</span>
+              <span className="font-medium">拍照</span>
+              <span className="text-xs text-gray-500">使用手機/裝置相機拍攝</span>
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleFile}
+                className="hidden"
+              />
+            </label>
+            <label className="flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-brand-500 hover:bg-brand-50 transition">
+              <span className="text-4xl">🖼️</span>
+              <span className="font-medium">從相簿/檔案上傳</span>
+              <span className="text-xs text-gray-500">選擇已存在的圖片檔</span>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleFile}
+                className="hidden"
+              />
+            </label>
+          </div>
+          {errorMsg && <p className="text-red-500 text-sm mt-3">{errorMsg}</p>}
         </div>
       )}
 

@@ -1,5 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { registerSW } from 'virtual:pwa-register';
 import App from './App';
 import { initDB } from './services/storage';
 import './index.css';
@@ -11,4 +12,7 @@ import './index.css';
       <App />
     </React.StrictMode>,
   );
+  if ('serviceWorker' in navigator) {
+    registerSW({ immediate: true });
+  }
 })();

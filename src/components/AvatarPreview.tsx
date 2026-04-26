@@ -1,4 +1,4 @@
-import { UserProfile } from '../types';
+import { profileToScales, UserProfile } from '../types';
 
 interface Props {
   profile: UserProfile;
@@ -8,6 +8,7 @@ interface Props {
 
 export default function AvatarPreview({ profile, className = '', height = 240 }: Props) {
   const url = `${import.meta.env.BASE_URL}avatars/${profile.gender}.svg`;
+  const { scaleX, scaleY } = profileToScales(profile);
   return (
     <div className={`flex items-end justify-center ${className}`} style={{ height }}>
       <img
@@ -15,7 +16,7 @@ export default function AvatarPreview({ profile, className = '', height = 240 }:
         alt={profile.gender}
         style={{
           height: '100%',
-          transform: `scale(${profile.weightScale}, ${profile.heightScale})`,
+          transform: `scale(${scaleX}, ${scaleY})`,
           transformOrigin: 'bottom center',
           transition: 'transform 0.15s ease',
         }}

@@ -20,9 +20,17 @@ localforage.config({
 });
 
 export async function initDB(): Promise<void> {
-  const profile = await localforage.getItem<UserProfile>(KEY_PROFILE);
-  if (!profile) {
+  const profileRaw = await localforage.getItem<any>(KEY_PROFILE);
+  if (!profileRaw) {
     await localforage.setItem(KEY_PROFILE, DEFAULT_PROFILE);
+  } else if (profileRaw.heightCm === undefined || profileRaw.weightKg === undefined) {
+    // Migrate legacy { heightScale, weightScale } → { heightCm, weightKg }
+    const migrated: UserProfile = {
+      gender: profileRaw.gender ?? 'male',
+      heightCm: Math.round(170 * (profileRaw.heightScale ?? 1)),
+      weightKg: Math.round(60 * (profileRaw.weightScale ?? 1)),
+    };
+    await localforage.setItem(KEY_PROFILE, migrated);
   }
   const cats = await localforage.getItem<string[]>(KEY_CATEGORIES);
   if (!cats) {

@@ -1,5 +1,5 @@
 import * as fabric from 'fabric';
-import { Clothing, OutfitItem, UserProfile } from '../types';
+import { Clothing, OutfitItem, UserProfile, profileToScales } from '../types';
 
 export interface ClothingObjectMeta {
   clotheId: string;
@@ -32,13 +32,14 @@ export class TryOnController {
     const cw = this.canvas.getWidth();
     const ch = this.canvas.getHeight();
     const baseScale = (ch * 0.95) / (img.height ?? 1);
+    const { scaleX, scaleY } = profileToScales(profile);
     img.set({
       originX: 'center',
       originY: 'center',
       left: cw / 2,
       top: ch / 2,
-      scaleX: baseScale * profile.weightScale,
-      scaleY: baseScale * profile.heightScale,
+      scaleX: baseScale * scaleX,
+      scaleY: baseScale * scaleY,
       selectable: false,
       evented: false,
       hoverCursor: 'default',

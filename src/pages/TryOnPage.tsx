@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useWardrobe } from '../context/WardrobeContext';
 import { Clothing } from '../types';
@@ -11,23 +11,38 @@ import {
 import { TryOnController } from '../services/canvasController';
 import CategoryTabs from '../components/CategoryTabs';
 
-const CANVAS_W = 480;
-const CANVAS_H = 640;
+const ASPECT = 3 / 4; // width / height
+const MAX_W = 520;
 
 export default function TryOnPage() {
   const { profile, categories } = useWardrobe();
   const { outfitId } = useParams();
   const navigate = useNavigate();
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const ctrlRef = useRef<TryOnController | null>(null);
 
   const [clothes, setClothes] = useState<Clothing[]>([]);
   const [active, setActive] = useState('全部');
   const [hasSelection, setHasSelection] = useState(false);
+  const [size, setSize] = useState({ w: 0, h: 0 });
+
+  // measure container width once mounted; observe resize
+  useLayoutEffect(() => {
+    if (!wrapperRef.current) return;
+    const ro = new ResizeObserver((entries) => {
+      const cw = Math.min(MAX_W, entries[0].contentRect.width);
+      const w = Math.max(240, cw);
+      const h = Math.round(w / ASPECT);
+      setSize((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
+    });
+    ro.observe(wrapperRef.current);
+    return () => ro.disconnect();
+  }, []);
 
   useEffect(() => {
-    if (!canvasRef.current) return;
-    const ctrl = new TryOnController(canvasRef.current, CANVAS_W, CANVAS_H);
+    if (!canvasRef.current || size.w === 0) return;
+    const ctrl = new TryOnController(canvasRef.current, size.w, size.h);
     ctrlRef.current = ctrl;
     const onSelect = () => setHasSelection(!!ctrl.canvas.getActiveObject());
     ctrl.canvas.on('selection:created', onSelect);
@@ -41,9 +56,7 @@ export default function TryOnPage() {
       setClothes(all);
       if (outfitId) {
         const outfit = await getOutfitById(outfitId);
-        if (outfit) {
-          await ctrl.restoreState(outfit.items, getClothingById);
-        }
+        if (outfit) await ctrl.restoreState(outfit.items, getClothingById);
       }
     })();
 
@@ -52,7 +65,7 @@ export default function TryOnPage() {
       ctrlRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile.gender, profile.heightScale, profile.weightScale, outfitId]);
+  }, [profile.gender, profile.heightCm, profile.weightKg, outfitId, size.w, size.h]);
 
   const filtered = active === '全部' ? clothes : clothes.filter((c) => c.category === active);
 
@@ -80,8 +93,8 @@ export default function TryOnPage() {
       <h2 className="text-2xl font-bold mb-4">試穿室</h2>
       <div className="grid lg:grid-cols-[1fr_320px] gap-4">
         <div>
-          <div className="bg-white p-3 rounded-lg border border-gray-200 inline-block">
-            <canvas ref={canvasRef} style={{ maxWidth: '100%' }} />
+          <div ref={wrapperRef} className="bg-white p-2 rounded-lg border border-gray-200 max-w-[520px] mx-auto lg:mx-0">
+            <canvas ref={canvasRef} className="block max-w-full" />
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
             <button
@@ -120,8 +133,8 @@ export default function TryOnPage() {
         <aside>
           <h3 className="font-semibold mb-2">衣物列表</h3>
           <CategoryTabs categories={categories} active={active} onChange={setActive} />
-          <div className="grid grid-cols-2 gap-2 max-h-[60vh] overflow-y-auto pr-1">
-            {filtered.length === 0 && <p className="text-sm text-gray-500">沒有衣物，請先到「新增衣物」上傳。</p>}
+          <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-2 gap-2 max-h-[60vh] overflow-y-auto pr-1">
+            {filtered.length === 0 && <p className="text-sm text-gray-500 col-span-full">沒有衣物，請先到「新增衣物」上傳。</p>}
             {filtered.map((c) => (
               <button
                 key={c.id}
@@ -129,7 +142,7 @@ export default function TryOnPage() {
                 className="bg-white border border-gray-200 rounded p-1 hover:border-brand-500"
                 title={c.name}
               >
-                <img src={c.imageBase64} alt={c.name} className="w-full h-24 object-contain" />
+                <img src={c.imageBase64} alt={c.name} className="w-full h-20 lg:h-24 object-contain" />
                 <div className="text-[11px] text-gray-600 truncate">{c.name || '未命名'}</div>
               </button>
             ))}
