@@ -17,3 +17,26 @@ body {
   border: 1px dashed #d1d5db;
   background: #fff;
 }
+
+/* Try-on canvas frame — gives the room a "fitting-room mirror" feel */
+.tryon-frame {
+  display: inline-block;
+  padding: 10px;
+  background:
+    linear-gradient(180deg, #fafafa 0%, #ececec 100%);
+  border-radius: 18px;
+  border: 6px solid #ffffff;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.9) inset,
+    0 12px 28px -10px rgba(15, 23, 42, 0.18),
+    0 4px 10px -4px rgba(15, 23, 42, 0.12);
+  position: relative;
+}
+.tryon-frame::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border-radius: 12px;
+  pointer-events: none;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.05) inset;
+}

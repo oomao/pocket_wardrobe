@@ -42,6 +42,19 @@ export function defaultAnchorsForCategory(category: string): ClothingAnchors {
   return { left: { x: 0.18, y: 0.18 }, right: { x: 0.82, y: 0.18 } };
 }
 
+// Layering priority on the try-on canvas: lower number = drawn first (back).
+// Used so that adding an outer 外套 to an existing 上衣 automatically lands
+// on top of the shirt, etc. — without the user having to fiddle with the
+// 上移/下移一層 buttons.
+export const CATEGORY_Z_ORDER: Record<string, number> = {
+  鞋子: 1,
+  下著: 2,
+  連身: 2,
+  上衣: 3,
+  外套: 4,
+  配件: 5,
+};
+
 export const ANCHORS_USED_BY_CATEGORY: Record<string, boolean> = {
   上衣: true,
   外套: true,

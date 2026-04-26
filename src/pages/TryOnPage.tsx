@@ -30,6 +30,7 @@ export default function TryOnPage() {
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [poseStatus, setPoseStatus] = useState<'idle' | 'detecting' | 'ready' | 'failed'>('idle');
+  const [clothingCount, setClothingCount] = useState(0);
 
   useLayoutEffect(() => {
     if (!wrapperRef.current) return;
@@ -60,6 +61,7 @@ export default function TryOnPage() {
     if (!canvasRef.current || size.w === 0) return;
     const ctrl = new TryOnController(canvasRef.current, size.w, size.h);
     ctrlRef.current = ctrl;
+    ctrl.setOnClothingCountChange(setClothingCount);
     const onSelect = () => setHasSelection(!!ctrl.canvas.getActiveObject());
     ctrl.canvas.on('selection:created', onSelect);
     ctrl.canvas.on('selection:updated', onSelect);
@@ -145,24 +147,35 @@ export default function TryOnPage() {
           </button>
         </div>
 
-        <div ref={wrapperRef} className="bg-white p-2 rounded-lg border border-gray-200 inline-block max-w-full">
-          <canvas ref={canvasRef} className="block max-w-full" style={{ touchAction: 'none' }} />
+        <div className="relative inline-block max-w-full">
+          <div ref={wrapperRef} className="tryon-frame">
+            <canvas ref={canvasRef} className="block max-w-full" style={{ touchAction: 'none' }} />
+          </div>
+          {clothingCount === 0 && size.w > 0 && (
+            <div className="absolute inset-x-0 bottom-6 flex justify-center pointer-events-none">
+              <span className="bg-white/90 backdrop-blur px-4 py-1.5 rounded-full text-xs text-gray-600 shadow-sm border border-gray-200">
+                👇 點選右側衣物開始試穿
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="mt-3 flex flex-wrap gap-2 pb-24 lg:pb-0">
           <button
             disabled={!hasSelection}
             onClick={() => ctrlRef.current?.bringForward()}
-            className="px-3 py-1.5 rounded bg-gray-100 text-sm disabled:opacity-50"
+            className="px-3 py-1.5 rounded bg-white border border-gray-200 hover:border-brand-500 text-sm disabled:opacity-40 transition-colors"
+            title="把選中的衣服往上一層"
           >
-            ⬆ 上移一層
+            ⬆ 上移
           </button>
           <button
             disabled={!hasSelection}
             onClick={() => ctrlRef.current?.sendBackwards()}
-            className="px-3 py-1.5 rounded bg-gray-100 text-sm disabled:opacity-50"
+            className="px-3 py-1.5 rounded bg-white border border-gray-200 hover:border-brand-500 text-sm disabled:opacity-40 transition-colors"
+            title="把選中的衣服往下一層"
           >
-            ⬇ 下移一層
+            ⬇ 下移
           </button>
           <button
             disabled={!hasSelection}
@@ -170,11 +183,15 @@ export default function TryOnPage() {
               ctrlRef.current?.removeActive();
               setHasSelection(false);
             }}
-            className="px-3 py-1.5 rounded bg-red-500 text-white text-sm disabled:opacity-50"
+            className="px-3 py-1.5 rounded bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 text-sm disabled:opacity-40 transition-colors"
           >
             🗑 移除
           </button>
-          <button onClick={handleSave} className="ml-auto px-4 py-1.5 rounded bg-brand-500 text-white text-sm">
+          <button
+            onClick={handleSave}
+            disabled={clothingCount === 0}
+            className="ml-auto px-4 py-1.5 rounded bg-brand-500 hover:bg-brand-600 text-white text-sm shadow-sm disabled:bg-gray-300 disabled:shadow-none"
+          >
             💾 儲存穿搭
           </button>
         </div>

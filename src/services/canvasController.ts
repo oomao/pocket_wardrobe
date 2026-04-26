@@ -3,6 +3,7 @@ import {
   ANCHORS_USED_BY_CATEGORY,
   CATEGORY_BODY_LANDMARKS,
   CATEGORY_PLACEMENT,
+  CATEGORY_Z_ORDER,
   CategoryBox,
   Clothing,
   ClothingAnchors,
@@ -31,15 +32,25 @@ export class TryOnController {
   private avatarImg: fabric.FabricImage | null = null;
   private avatarTx: AvatarTransform | null = null;
   private bodyLandmarks: NormalizedLandmark[] | null = null;
+  private onClothingCountChange: ((n: number) => void) | null = null;
 
   constructor(el: HTMLCanvasElement, width: number, height: number) {
     this.canvas = new fabric.Canvas(el, {
       width,
       height,
-      backgroundColor: '#ffffff',
+      backgroundColor: '#fafafa',
       preserveObjectStacking: true,
       selection: false,
     });
+  }
+
+  setOnClothingCountChange(cb: (n: number) => void) {
+    this.onClothingCountChange = cb;
+  }
+
+  private emitCount() {
+    const n = this.canvas.getObjects().filter((o) => (o as any).clotheId).length;
+    this.onClothingCountChange?.(n);
   }
 
   dispose() {
@@ -270,16 +281,64 @@ export class TryOnController {
       scaleX: scaleX!,
       scaleY: scaleY ?? scaleX!,
       angle,
+      // Refined selection: smaller circular handles with white outline
       cornerStyle: 'circle',
       cornerColor: '#a21caf',
-      borderColor: '#a21caf',
+      cornerStrokeColor: '#ffffff',
+      cornerSize: 9,
       transparentCorners: false,
+      borderColor: 'rgba(162, 28, 175, 0.55)',
+      borderScaleFactor: 1.2,
+      padding: 4,
+      // Soft drop shadow for depth so the clothing reads as ON the body
+      shadow: new fabric.Shadow({
+        color: 'rgba(15, 23, 42, 0.28)',
+        blur: 14,
+        offsetX: 0,
+        offsetY: 8,
+      }),
+      // Start invisible for fade-in
+      opacity: restoring ? 1 : 0,
     });
     (img as any).clotheId = clothing.id;
+    (img as any).clothingCategory = clothing.category;
     this.canvas.add(img);
+    this.reorderByCategory();
     this.canvas.setActiveObject(img);
     this.canvas.requestRenderAll();
+
+    if (!restoring) {
+      img.animate(
+        { opacity: 1 },
+        {
+          duration: 260,
+          onChange: () => this.canvas.requestRenderAll(),
+        },
+      );
+    }
+
+    this.emitCount();
     return img;
+  }
+
+  // Re-stack clothing by their category z-priority (鞋 < 下著/連身 < 上衣 <
+  // 外套 < 配件) so users almost never need to use 上移/下移一層 manually.
+  // Avatar always stays at the very back.
+  private reorderByCategory() {
+    const all = this.canvas.getObjects();
+    if (all.length <= 1) return;
+    const others = all.filter((o) => o !== this.avatarImg);
+    others.sort((a, b) => {
+      const ca = (a as any).clothingCategory as string | undefined;
+      const cb = (b as any).clothingCategory as string | undefined;
+      const za = CATEGORY_Z_ORDER[ca || ''] ?? 99;
+      const zb = CATEGORY_Z_ORDER[cb || ''] ?? 99;
+      if (za !== zb) return za - zb;
+      // Within the same category preserve original order (later additions on top)
+      return all.indexOf(a) - all.indexOf(b);
+    });
+    if (this.avatarImg) this.canvas.sendObjectToBack(this.avatarImg);
+    others.forEach((o) => this.canvas.bringObjectToFront(o));
   }
 
   bringForward() {
@@ -300,9 +359,19 @@ export class TryOnController {
   removeActive() {
     const o = this.canvas.getActiveObject();
     if (o && o !== this.avatarImg) {
-      this.canvas.remove(o);
-      this.canvas.discardActiveObject();
-      this.canvas.requestRenderAll();
+      o.animate(
+        { opacity: 0 },
+        {
+          duration: 160,
+          onChange: () => this.canvas.requestRenderAll(),
+          onComplete: () => {
+            this.canvas.remove(o);
+            this.canvas.discardActiveObject();
+            this.canvas.requestRenderAll();
+            this.emitCount();
+          },
+        },
+      );
     }
   }
 
@@ -342,7 +411,9 @@ export class TryOnController {
       if (!c) continue;
       await this.addClothing(c, it);
     }
+    this.reorderByCategory();
     this.canvas.discardActiveObject();
     this.canvas.requestRenderAll();
+    this.emitCount();
   }
 }
