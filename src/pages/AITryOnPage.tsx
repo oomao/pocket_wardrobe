@@ -13,7 +13,12 @@ import {
   runVirtualTryOn,
   saveAIConfig,
 } from '../services/aiTryOn';
+import { loadGeminiKey, runGeminiTryOn, saveGeminiKey } from '../services/geminiTryOn';
 import CategoryTabs from '../components/CategoryTabs';
+
+type Provider = 'gemini' | 'hf';
+
+const PROVIDER_KEY = 'pw_ai_provider';
 
 export default function AITryOnPage() {
   const { profile, categories } = useWardrobe();
@@ -22,20 +27,25 @@ export default function AITryOnPage() {
   const [picked, setPicked] = useState<Clothing | null>(null);
   const [running, setRunning] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
-  const [stage, setStage] = useState<ProgressStage | null>(null);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const [showConsent, setShowConsent] = useState(false);
-  const [showConfig, setShowConfig] = useState(false);
-  const [config, setConfig] = useState<AITryOnConfig>(loadAIConfig());
+  const [provider, setProvider] = useState<Provider>(
+    (localStorage.getItem(PROVIDER_KEY) as Provider) || 'gemini',
+  );
+  const [geminiKey, setGeminiKey] = useState(loadGeminiKey());
+  const [showSettings, setShowSettings] = useState(false);
+  const [hfConfig, setHfConfig] = useState<AITryOnConfig>(loadAIConfig());
 
   useEffect(() => {
     getAllClothing().then(setClothes);
   }, []);
 
-  const ready = profile.avatarMode === 'photo' && !!profile.photoBase64;
+  useEffect(() => {
+    localStorage.setItem(PROVIDER_KEY, provider);
+  }, [provider]);
 
+  const ready = profile.avatarMode === 'photo' && !!profile.photoBase64;
   const filtered = useMemo(
     () => (active === '全部' ? clothes : clothes.filter((c) => c.category === active)),
     [active, clothes],
@@ -43,44 +53,49 @@ export default function AITryOnPage() {
 
   const start = async () => {
     if (!ready || !picked || !profile.photoBase64) return;
-    if (!hasConsent()) {
-      setShowConsent(true);
+    if (provider === 'gemini' && !geminiKey) {
+      setShowSettings(true);
       return;
+    }
+    if (provider === 'hf' && !hasConsent()) {
+      grantConsent();
     }
     setRunning(true);
     setErrorMsg(null);
     setResultUrl(null);
+    setStatusMsg('');
     try {
-      const res = await runVirtualTryOn(profile.photoBase64, picked.imageBase64, {
-        ...config,
-        category: picked.category,
-        onStatus: (s, m) => {
-          setStage(s);
-          setStatusMsg(m);
-        },
-      });
-      setResultUrl(res.imageUrl);
+      if (provider === 'gemini') {
+        const res = await runGeminiTryOn({
+          apiKey: geminiKey,
+          personImageDataUrl: profile.photoBase64,
+          garmentImageDataUrl: picked.imageBase64,
+          garmentCategory: picked.category,
+          garmentName: picked.name,
+          onStatus: setStatusMsg,
+        });
+        setResultUrl(res.imageDataUrl);
+      } else {
+        const res = await runVirtualTryOn(profile.photoBase64, picked.imageBase64, {
+          ...hfConfig,
+          category: picked.category,
+          onStatus: (_s: ProgressStage, m: string) => setStatusMsg(m),
+        });
+        setResultUrl(res.imageUrl);
+      }
     } catch (err: any) {
       console.error(err);
       const msg = err?.message || String(err);
-      setErrorMsg(
-        `AI 試穿失敗：${msg}\n\n可能原因：Space 在睡眠 / 排隊太久 / 該 Space 的 API 與本應用不相容。\n你可以點「⚙️ 進階設定」改用其他 Space。`,
-      );
+      setErrorMsg(msg);
     } finally {
       setRunning(false);
-      setStage(null);
     }
   };
 
-  const onConsent = () => {
-    grantConsent();
-    setShowConsent(false);
-    start();
-  };
-
-  const saveConfig = () => {
-    saveAIConfig(config);
-    setShowConfig(false);
+  const saveSettings = () => {
+    saveGeminiKey(geminiKey);
+    saveAIConfig(hfConfig);
+    setShowSettings(false);
   };
 
   return (
@@ -89,14 +104,38 @@ export default function AITryOnPage() {
         <div>
           <h2 className="text-2xl font-bold">✨ AI 真實試穿</h2>
           <p className="text-xs text-gray-500 mt-1">
-            使用開源 Virtual Try-On 模型（HuggingFace Space），把衣物真正合成到你的照片上。
+            使用 AI 把衣物實際合成到你的照片上，效果接近 Google Shopping 的試穿體驗。
           </p>
         </div>
+        <button onClick={() => setShowSettings(true)} className="text-xs text-gray-500 underline">
+          ⚙️ AI 設定
+        </button>
+      </div>
+
+      {/* Provider selector */}
+      <div className="grid sm:grid-cols-2 gap-2 mb-4">
         <button
-          onClick={() => setShowConfig(true)}
-          className="text-xs text-gray-500 underline"
+          onClick={() => setProvider('gemini')}
+          className={`text-left p-3 rounded-lg border ${
+            provider === 'gemini' ? 'border-brand-500 bg-brand-50 ring-2 ring-brand-500' : 'border-gray-300 bg-white'
+          }`}
         >
-          ⚙️ 進階設定
+          <div className="font-semibold text-sm">🍌 Google Gemini 2.5 Flash Image (推薦)</div>
+          <div className="text-xs text-gray-600 mt-1">
+            Google 自家「Nano Banana」模型，跟 Google Shopping 試穿同級。免費（需自行申請 Google AI Studio API key）。
+            速度 5–15 秒，品質最高。
+          </div>
+        </button>
+        <button
+          onClick={() => setProvider('hf')}
+          className={`text-left p-3 rounded-lg border ${
+            provider === 'hf' ? 'border-brand-500 bg-brand-50 ring-2 ring-brand-500' : 'border-gray-300 bg-white'
+          }`}
+        >
+          <div className="font-semibold text-sm">🤗 HuggingFace 開源 Space</div>
+          <div className="text-xs text-gray-600 mt-1">
+            CatVTON / Kolors-VTON 等開源模型，零設定但速度較慢、有時排隊。當作備援使用。
+          </div>
         </button>
       </div>
 
@@ -107,22 +146,33 @@ export default function AITryOnPage() {
         </div>
       )}
 
+      {ready && provider === 'gemini' && !geminiKey && (
+        <div className="bg-sky-50 border border-sky-200 text-sky-800 rounded-lg p-4 text-sm mb-4">
+          <p className="font-semibold mb-1">🔑 第一次使用需要設定 Gemini API Key（免費）</p>
+          <ol className="list-decimal pl-5 space-y-1 text-xs">
+            <li>到 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" className="underline font-semibold">aistudio.google.com/apikey</a> 用 Google 帳號登入</li>
+            <li>點 「Create API key」→ 複製出來</li>
+            <li>回來這頁點右上「⚙️ AI 設定」貼上即可</li>
+          </ol>
+          <p className="text-xs text-gray-600 mt-2">
+            Token 只儲存在你的瀏覽器，不會上傳。免費額度約每分鐘 60 次、每日 1500 次。
+          </p>
+          <button onClick={() => setShowSettings(true)} className="mt-3 bg-brand-500 text-white px-3 py-1.5 rounded text-sm">
+            開啟設定貼 Key
+          </button>
+        </div>
+      )}
+
       {ready && (
         <div className="grid lg:grid-cols-[320px_1fr] gap-4">
-          {/* Left: photo */}
           <div className="bg-white rounded-lg border border-gray-200 p-3">
             <p className="text-xs text-gray-500 mb-1">您的照片</p>
-            <img
-              src={profile.photoBase64}
-              alt="me"
-              className="w-full max-h-80 object-contain bg-gray-50 rounded"
-            />
+            <img src={profile.photoBase64} alt="me" className="w-full max-h-80 object-contain bg-gray-50 rounded" />
             <p className="text-[11px] text-gray-400 mt-2">
               要更換照片請到 <Link to="/settings" className="underline">設定頁</Link>
             </p>
           </div>
 
-          {/* Right: clothing picker + run + result */}
           <div className="space-y-4">
             <div className="bg-white rounded-lg border border-gray-200 p-3">
               <div className="flex items-center justify-between mb-2">
@@ -155,34 +205,26 @@ export default function AITryOnPage() {
             <div className="bg-white rounded-lg border border-gray-200 p-3">
               <button
                 onClick={start}
-                disabled={!picked || running}
+                disabled={!picked || running || (provider === 'gemini' && !geminiKey)}
                 className="w-full bg-brand-500 hover:bg-brand-600 disabled:bg-gray-300 text-white py-3 rounded font-semibold"
               >
-                {running ? '處理中…' : picked ? '✨ 開始 AI 試穿' : '請先選一件衣物'}
+                {running
+                  ? '處理中…'
+                  : picked
+                  ? `✨ 用 ${provider === 'gemini' ? 'Gemini' : 'HF Space'} 試穿`
+                  : '請先選一件衣物'}
               </button>
-              {running && stage && (
+              {running && (
                 <div className="mt-3">
                   <p className="text-sm">{statusMsg}</p>
                   <div className="mt-2 h-1.5 bg-gray-200 rounded overflow-hidden">
-                    <div
-                      className="h-full bg-brand-500 animate-pulse"
-                      style={{
-                        width:
-                          stage === 'connect' ? '20%' :
-                          stage === 'queue' ? '45%' :
-                          stage === 'processing' ? '80%' :
-                          '100%',
-                      }}
-                    />
+                    <div className="h-full bg-brand-500 animate-pulse w-2/3" />
                   </div>
-                  <p className="text-[11px] text-gray-500 mt-2">
-                    公共 Space 第一次連線可能要等候排隊；如果太久請試其他 Space。
-                  </p>
                 </div>
               )}
               {errorMsg && (
                 <div className="mt-3 text-sm bg-red-50 border border-red-200 rounded p-3 text-red-700 whitespace-pre-line">
-                  {errorMsg}
+                  ❌ {errorMsg}
                 </div>
               )}
             </div>
@@ -192,11 +234,7 @@ export default function AITryOnPage() {
                 <p className="text-sm font-semibold mb-2">🎉 結果</p>
                 <img src={resultUrl} alt="AI try-on result" className="w-full max-h-[60vh] object-contain bg-gray-50 rounded" />
                 <div className="flex gap-2 mt-3">
-                  <a
-                    href={resultUrl}
-                    download="ai-try-on.png"
-                    className="bg-brand-500 text-white px-3 py-1.5 rounded text-sm"
-                  >
+                  <a href={resultUrl} download="ai-try-on.png" className="bg-brand-500 text-white px-3 py-1.5 rounded text-sm">
                     💾 下載
                   </a>
                   <button onClick={start} disabled={running} className="bg-gray-100 px-3 py-1.5 rounded text-sm">
@@ -209,80 +247,66 @@ export default function AITryOnPage() {
         </div>
       )}
 
-      {/* Consent modal */}
-      {showConsent && (
+      {/* Settings modal */}
+      {showSettings && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-lg w-full p-5 space-y-3">
-            <h3 className="text-lg font-bold">使用 AI 試穿前請知悉</h3>
-            <ul className="text-sm text-gray-700 list-disc pl-5 space-y-1">
-              <li>您的<strong>照片與衣物影像</strong>會以 HTTPS 傳送到第三方 HuggingFace Space ({config.spaceId})。</li>
-              <li>該 Space 由開源社群提供，本應用無法保證其資料保留政策。</li>
-              <li>處理需要 30–90 秒，公共 Space 可能排隊或暫停服務。</li>
-              <li>結果僅儲存在你的瀏覽器，不會上傳到任何伺服器。</li>
-            </ul>
-            <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setShowConsent(false)} className="px-3 py-1.5 rounded bg-gray-100 text-sm">
-                取消
-              </button>
-              <button onClick={onConsent} className="px-3 py-1.5 rounded bg-brand-500 text-white text-sm">
-                我同意，開始試穿
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          <div className="bg-white rounded-lg max-w-lg w-full p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-bold">⚙️ AI 試穿設定</h3>
 
-      {/* Config modal */}
-      {showConfig && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-lg w-full p-5 space-y-3">
-            <h3 className="text-lg font-bold">⚙️ AI 試穿進階設定</h3>
-            <p className="text-xs text-gray-500">
-              如預設 Space 失效或想換更穩的服務，可在這裡指定其他 HuggingFace Space。
-            </p>
-            <label className="block text-sm">
-              Space ID
-              <input
-                value={config.spaceId}
-                onChange={(e) => setConfig({ ...config, spaceId: e.target.value })}
-                className="w-full mt-1 border border-gray-300 rounded px-2 py-1.5 text-sm font-mono"
-                placeholder="user/space-name"
-              />
-              <span className="text-[11px] text-gray-500 block mt-1">
-                範例：Kwai-Kolors/Kolors-Virtual-Try-On、zhengchong/CatVTON、yisol/IDM-VTON
-              </span>
-            </label>
-            <label className="block text-sm">
-              Endpoint
-              <input
-                value={config.endpoint || ''}
-                onChange={(e) => setConfig({ ...config, endpoint: e.target.value })}
-                className="w-full mt-1 border border-gray-300 rounded px-2 py-1.5 text-sm font-mono"
-                placeholder="/tryon"
-              />
-              <span className="text-[11px] text-gray-500 block mt-1">通常是 /tryon、/predict 或 /process</span>
-            </label>
-            <label className="block text-sm">
-              HuggingFace Token（選填，可提高配額）
+            <section className="border-b pb-4">
+              <h4 className="font-semibold text-sm mb-2">🍌 Gemini API Key（推薦）</h4>
               <input
                 type="password"
-                value={config.hfToken || ''}
-                onChange={(e) => setConfig({ ...config, hfToken: e.target.value })}
+                value={geminiKey}
+                onChange={(e) => setGeminiKey(e.target.value)}
                 className="w-full mt-1 border border-gray-300 rounded px-2 py-1.5 text-sm font-mono"
-                placeholder="hf_..."
+                placeholder="AIza..."
               />
-              <span className="text-[11px] text-gray-500 block mt-1">
-                註冊免費 HF 帳號 → Settings → Access Tokens 取得。Token 只存在你的瀏覽器。
-              </span>
-            </label>
+              <p className="text-[11px] text-gray-500 mt-2">
+                免費取得：<a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" className="underline text-sky-600">aistudio.google.com/apikey</a>。
+                Key 僅儲存在你的瀏覽器，不會上傳到任何地方。
+              </p>
+            </section>
+
+            <section>
+              <h4 className="font-semibold text-sm mb-2">🤗 HF Space（備援）</h4>
+              <label className="block text-sm">
+                Space ID
+                <input
+                  value={hfConfig.spaceId}
+                  onChange={(e) => setHfConfig({ ...hfConfig, spaceId: e.target.value })}
+                  className="w-full mt-1 border border-gray-300 rounded px-2 py-1.5 text-sm font-mono"
+                  placeholder="user/space-name"
+                />
+                <span className="text-[11px] text-gray-500 block mt-1">
+                  範例：Kwai-Kolors/Kolors-Virtual-Try-On、zhengchong/CatVTON
+                </span>
+              </label>
+              <label className="block text-sm mt-2">
+                Endpoint
+                <input
+                  value={hfConfig.endpoint || ''}
+                  onChange={(e) => setHfConfig({ ...hfConfig, endpoint: e.target.value })}
+                  className="w-full mt-1 border border-gray-300 rounded px-2 py-1.5 text-sm font-mono"
+                  placeholder="/tryon"
+                />
+              </label>
+            </section>
+
             <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setConfig(DEFAULT_CONFIG)} className="px-3 py-1.5 rounded bg-gray-100 text-sm">
-                回復預設
+              <button
+                onClick={() => {
+                  setHfConfig(DEFAULT_CONFIG);
+                  setGeminiKey('');
+                }}
+                className="px-3 py-1.5 rounded bg-gray-100 text-sm"
+              >
+                清除
               </button>
-              <button onClick={() => setShowConfig(false)} className="px-3 py-1.5 rounded bg-gray-100 text-sm">
+              <button onClick={() => setShowSettings(false)} className="px-3 py-1.5 rounded bg-gray-100 text-sm">
                 取消
               </button>
-              <button onClick={saveConfig} className="px-3 py-1.5 rounded bg-brand-500 text-white text-sm">
+              <button onClick={saveSettings} className="px-3 py-1.5 rounded bg-brand-500 text-white text-sm">
                 儲存
               </button>
             </div>
