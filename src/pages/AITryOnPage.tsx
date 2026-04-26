@@ -31,7 +31,7 @@ export default function AITryOnPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const [provider, setProvider] = useState<Provider>(
-    () => (localStorage.getItem(PROVIDER_KEY) as Provider) || 'puter',
+    () => (localStorage.getItem(PROVIDER_KEY) as Provider) || 'hf',
   );
   const [showConsent, setShowConsent] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -118,23 +118,6 @@ export default function AITryOnPage() {
       {/* Provider selector */}
       <div className="grid sm:grid-cols-2 gap-2 mb-5">
         <button
-          onClick={() => setProvider('puter')}
-          className={`text-left p-4 rounded-xl border transition-all ${
-            provider === 'puter'
-              ? 'border-brand-500 bg-cream-50 ring-2 ring-brand-500/30'
-              : 'border-cream-200 bg-white hover:border-brand-300'
-          }`}
-        >
-          <div className="flex items-center justify-between mb-1">
-            <span className="font-semibold text-sm text-walnut-700">🍌 Google Nano Banana（推薦）</span>
-            <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">免費</span>
-          </div>
-          <p className="text-xs text-stone-600 mt-1 leading-relaxed">
-            透過 Puter.js 呼叫 Google 自家的 Gemini 影像模型，跟 Google Shopping 試穿同等級。
-            首次使用需登入 Puter（30 秒、不用信用卡），之後無限免費。
-          </p>
-        </button>
-        <button
           onClick={() => setProvider('hf')}
           className={`text-left p-4 rounded-xl border transition-all ${
             provider === 'hf'
@@ -143,11 +126,29 @@ export default function AITryOnPage() {
           }`}
         >
           <div className="flex items-center justify-between mb-1">
-            <span className="font-semibold text-sm text-walnut-700">🤗 HuggingFace 開源 Space</span>
-            <span className="text-[10px] bg-stone-200 text-stone-600 px-2 py-0.5 rounded-full">備援</span>
+            <span className="font-semibold text-sm text-walnut-700">🤗 HuggingFace 開源 Space（推薦）</span>
+            <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">免費</span>
           </div>
           <p className="text-xs text-stone-600 mt-1 leading-relaxed">
-            CatVTON / Kolors-VTON 等開源模型，零設定但速度較慢、有時排隊。當主方案壞掉時用。
+            可從 Qwen-Image-Edit / FLUX Kontext / Kolors 等多個開源模型挑選（盲測勝過 Gemini 2.5）。
+            登入免費 HF 帳號後 ZeroGPU 額度更穩；匿名也可用，但 Space 喚醒約 30–60 秒。
+          </p>
+        </button>
+        <button
+          onClick={() => setProvider('puter')}
+          className={`text-left p-4 rounded-xl border transition-all ${
+            provider === 'puter'
+              ? 'border-brand-500 bg-cream-50 ring-2 ring-brand-500/30'
+              : 'border-cream-200 bg-white hover:border-brand-300'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-1">
+            <span className="font-semibold text-sm text-walnut-700">🍌 Puter Nano Banana</span>
+            <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">每日有額度</span>
+          </div>
+          <p className="text-xs text-stone-600 mt-1 leading-relaxed">
+            透過 Puter.js 呼叫 Google Gemini 影像模型。免費但每日有限額（通常 10–20 次後會 rate-limit），
+            首次使用需登入 Puter 帳號。當作 HF 備援。
           </p>
         </button>
       </div>

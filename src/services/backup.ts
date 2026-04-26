@@ -125,14 +125,21 @@ export async function importFromZip(file: Blob): Promise<ImportSummary> {
   if (!manifestText) throw new Error('壓縮檔內缺少 wardrobe.json');
   const manifest: Manifest = JSON.parse(manifestText);
 
+  // JSZip's blob extraction returns Blob with no MIME type, which causes
+  // FileReader to spit out 'data:application/octet-stream;base64,…'. Wrap
+  // each blob with the right type so the dataURL prefix is correct.
+  async function readZipBlob(path: string, mime: string): Promise<string | undefined> {
+    const file = zip.file(path);
+    if (!file) return undefined;
+    const buffer = await file.async('arraybuffer');
+    const blob = new Blob([buffer], { type: mime });
+    return blobToDataUrl(blob);
+  }
+
   const clothes: Clothing[] = [];
   for (const c of manifest.clothes) {
-    let imageBase64 = '';
-    const file = zip.file(`images/clothes/${c.imageFile}`);
-    if (file) {
-      const blob = await file.async('blob');
-      imageBase64 = await blobToDataUrl(blob);
-    }
+    const imageBase64 =
+      (await readZipBlob(`images/clothes/${c.imageFile}`, 'image/png')) ?? '';
     const { imageFile, ...rest } = c;
     clothes.push({ ...rest, imageBase64 } as Clothing);
   }
@@ -141,11 +148,7 @@ export async function importFromZip(file: Blob): Promise<ImportSummary> {
   for (const s of manifest.styles) {
     let thumbnail: string | undefined;
     if (s.thumbnailFile) {
-      const file = zip.file(`images/styles/${s.thumbnailFile}`);
-      if (file) {
-        const blob = await file.async('blob');
-        thumbnail = await blobToDataUrl(blob);
-      }
+      thumbnail = await readZipBlob(`images/styles/${s.thumbnailFile}`, 'image/jpeg');
     }
     const { thumbnailFile, ...rest } = s;
     styles.push({ ...rest, thumbnail } as Style);
@@ -153,11 +156,10 @@ export async function importFromZip(file: Blob): Promise<ImportSummary> {
 
   const profile: UserProfile = { ...manifest.profile };
   if (manifest.profilePhotoFile) {
-    const file = zip.file(`images/${manifest.profilePhotoFile}`);
-    if (file) {
-      const blob = await file.async('blob');
-      profile.photoBase64 = await blobToDataUrl(blob);
-    }
+    profile.photoBase64 = await readZipBlob(
+      `images/${manifest.profilePhotoFile}`,
+      'image/png',
+    );
   }
 
   await Promise.all([

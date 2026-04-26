@@ -22,8 +22,8 @@ const MODES: ModeCard[] = [
     icon: '✨',
     title: 'AI 真實試穿',
     subtitle: '擬真合成',
-    badge: '需 Google AI Studio Key',
-    description: '用 Google Gemini Nano Banana 合成「你穿上這件衣服」的真實照片。效果接近 Google Shopping 商品試穿。',
+    badge: '免費（多模型可選）',
+    description: '透過 HuggingFace 公共 Space 合成「你穿上這件衣服」的真實照片，可從 Qwen / FLUX / Kolors 等多種開源模型挑選；備援也支援 Puter Nano Banana。',
   },
   {
     to: '/style',
