@@ -15,6 +15,7 @@ export class EditorCanvas {
   private lastX = 0;
   private lastY = 0;
   private detachers: Array<() => void> = [];
+  private activePointers = new Set<number>();
   private undoStack: ImageData[] = [];
   private onChange?: () => void;
 
@@ -53,19 +54,26 @@ export class EditorCanvas {
     if (!enable) return;
     const onDown = (e: PointerEvent) => this.onDown(e);
     const onMove = (e: PointerEvent) => this.onMove(e);
-    const onUp = () => {
+    const onUp = (e: PointerEvent) => {
+      this.activePointers.delete(e.pointerId);
       if (this.drawing) {
         this.drawing = false;
         this.onChange?.();
       }
     };
+    const onCancel = (e: PointerEvent) => {
+      this.activePointers.delete(e.pointerId);
+      this.drawing = false;
+    };
     this.el.addEventListener('pointerdown', onDown);
     this.el.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onCancel);
     this.detachers.push(
       () => this.el.removeEventListener('pointerdown', onDown),
       () => this.el.removeEventListener('pointermove', onMove),
       () => window.removeEventListener('pointerup', onUp),
+      () => window.removeEventListener('pointercancel', onCancel),
     );
   }
 
@@ -96,6 +104,12 @@ export class EditorCanvas {
   }
 
   private onDown(e: PointerEvent) {
+    this.activePointers.add(e.pointerId);
+    // Multi-touch (pinch) → don't draw, let the wrapper handle zoom
+    if (this.activePointers.size > 1) {
+      this.drawing = false;
+      return;
+    }
     e.preventDefault();
     this.snapshot();
     this.drawing = true;
@@ -106,7 +120,7 @@ export class EditorCanvas {
   }
 
   private onMove(e: PointerEvent) {
-    if (!this.drawing) return;
+    if (this.activePointers.size > 1 || !this.drawing) return;
     e.preventDefault();
     const { x, y } = this.getPos(e);
     this.eraseAt(this.lastX, this.lastY, x, y);

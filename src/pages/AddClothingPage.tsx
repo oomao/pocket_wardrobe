@@ -1,4 +1,4 @@
-import { ChangeEvent, useEffect, useRef, useState } from 'react';
+import { ChangeEvent, ReactNode, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWardrobe } from '../context/WardrobeContext';
 import { blobToDataURL, removeBackground } from '../services/imageProcessing';
@@ -12,6 +12,92 @@ import {
 } from '../types';
 
 type Step = 'idle' | 'removing' | 'editing' | 'anchors' | 'meta' | 'saving';
+
+// Wrapper that handles two-finger pinch to drive the zoom slider, and lets
+// single-finger / mouse events fall through to the canvas (eraser).
+function PinchZoomWrapper({
+  children,
+  zoom,
+  setZoom,
+  pannable,
+}: {
+  children: ReactNode;
+  zoom: number;
+  setZoom: (z: number) => void;
+  pannable: boolean;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const pinchStart = useRef<{ dist: number; zoom: number } | null>(null);
+  const panStart = useRef<{ x: number; y: number; sl: number; st: number } | null>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const onDown = (e: PointerEvent) => {
+      pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pointers.current.size === 2) {
+        const pts = [...pointers.current.values()];
+        pinchStart.current = {
+          dist: Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y),
+          zoom,
+        };
+        panStart.current = null;
+      } else if (pointers.current.size === 1 && pannable) {
+        panStart.current = { x: e.clientX, y: e.clientY, sl: el.scrollLeft, st: el.scrollTop };
+      }
+    };
+    const onMove = (e: PointerEvent) => {
+      if (!pointers.current.has(e.pointerId)) return;
+      pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pointers.current.size >= 2 && pinchStart.current) {
+        const pts = [...pointers.current.values()];
+        const d = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+        const ratio = d / pinchStart.current.dist;
+        const next = Math.max(25, Math.min(300, Math.round(pinchStart.current.zoom * ratio)));
+        setZoom(next);
+        e.preventDefault();
+      } else if (pointers.current.size === 1 && pannable && panStart.current) {
+        el.scrollLeft = panStart.current.sl - (e.clientX - panStart.current.x);
+        el.scrollTop = panStart.current.st - (e.clientY - panStart.current.y);
+        e.preventDefault();
+      }
+    };
+    const onUp = (e: PointerEvent) => {
+      pointers.current.delete(e.pointerId);
+      if (pointers.current.size < 2) pinchStart.current = null;
+      if (pointers.current.size === 0) panStart.current = null;
+    };
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      const next = Math.max(25, Math.min(300, Math.round(zoom * (e.deltaY < 0 ? 1.1 : 0.9))));
+      setZoom(next);
+    };
+    el.addEventListener('pointerdown', onDown);
+    el.addEventListener('pointermove', onMove, { passive: false });
+    el.addEventListener('pointerup', onUp);
+    el.addEventListener('pointercancel', onUp);
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => {
+      el.removeEventListener('pointerdown', onDown);
+      el.removeEventListener('pointermove', onMove);
+      el.removeEventListener('pointerup', onUp);
+      el.removeEventListener('pointercancel', onUp);
+      el.removeEventListener('wheel', onWheel);
+    };
+  }, [zoom, setZoom, pannable]);
+
+  return (
+    <div
+      ref={ref}
+      className="canvas-wrapper overflow-auto bg-[conic-gradient(at_50%_50%,#f3f4f6_25%,#fff_0_50%,#f3f4f6_0_75%,#fff_0)] bg-[length:16px_16px]"
+      style={{ maxHeight: '55vh', touchAction: 'none' }}
+    >
+      {children}
+    </div>
+  );
+}
 
 function anchorLabels(category: string) {
   if (category === '下著') return { left: '左腰側', right: '右腰側' };
@@ -221,17 +307,14 @@ export default function AddClothingPage() {
               <span className="text-gray-500 w-12 text-right">{zoom}%</span>
             </label>
           </div>
-          <div
-            className="canvas-wrapper overflow-auto bg-[conic-gradient(at_50%_50%,#f3f4f6_25%,#fff_0_50%,#f3f4f6_0_75%,#fff_0)] bg-[length:16px_16px]"
-            style={{ maxHeight: '55vh', touchAction: zoom > 100 ? 'auto' : 'none' }}
-          >
+          <PinchZoomWrapper zoom={zoom} setZoom={setZoom} pannable={!eraserOn}>
             <canvas
               ref={canvasRef}
               style={{ display: 'block', width: `${zoom}%`, height: 'auto', maxWidth: 'none' }}
             />
-          </div>
+          </PinchZoomWrapper>
           <p className="text-xs text-gray-400 mt-2">
-            💡 微調完成後點「下一步：標對齊點」。如果分類是「配件」會跳過此步驟。
+            💡 雙指可放大／縮小；單指（橡皮擦關閉時）可平移；桌機 Ctrl + 滾輪縮放。
           </p>
         </div>
         <div className="flex justify-end mb-8">
