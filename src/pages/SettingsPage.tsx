@@ -2,7 +2,7 @@ import { ChangeEvent, useState } from 'react';
 import { useWardrobe } from '../context/WardrobeContext';
 import AvatarPreview from '../components/AvatarPreview';
 import { countClothingByCategory } from '../services/storage';
-import { blobToDataURL, removeBackground } from '../services/imageProcessing';
+import { blobToDataURL, cropTransparent, removeBackground } from '../services/imageProcessing';
 import { AvatarMode, Gender, HEIGHT_RANGE, WEIGHT_RANGE } from '../types';
 
 type PhotoStep = 'idle' | 'processing' | 'error';
@@ -53,6 +53,8 @@ export default function SettingsPage() {
           setPhotoProgress({ current, total }),
         );
         dataUrl = await blobToDataURL(blob);
+        // Trim transparent borders so the person fills the canvas later.
+        dataUrl = await cropTransparent(dataUrl, 16);
       } else {
         dataUrl = await blobToDataURL(file);
       }

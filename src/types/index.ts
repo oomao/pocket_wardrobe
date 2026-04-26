@@ -52,12 +52,15 @@ export const ANCHORS_USED_BY_CATEGORY: Record<string, boolean> = {
 };
 
 // Map category -> body landmarks (MediaPipe Pose indices) the anchors map onto.
+// IMPORTANT: keys here use *image-side* convention (left = visually-left side
+// of the photo). MediaPipe's LEFT_SHOULDER (idx 11) is the *wearer's* left,
+// which appears on the visual RIGHT of the photo. So we deliberately swap.
 export const CATEGORY_BODY_LANDMARKS: Record<string, { left: number; right: number } | null> = {
-  上衣: { left: 11, right: 12 }, // shoulders
-  外套: { left: 11, right: 12 },
-  連身: { left: 11, right: 12 },
-  下著: { left: 23, right: 24 }, // hips
-  鞋子: { left: 27, right: 28 }, // ankles
+  上衣: { left: 12, right: 11 }, // image-left = wearer's right shoulder (MP idx 12)
+  外套: { left: 12, right: 11 },
+  連身: { left: 12, right: 11 },
+  下著: { left: 24, right: 23 }, // image-left = wearer's right hip (MP idx 24)
+  鞋子: { left: 28, right: 27 }, // image-left = wearer's right ankle (MP idx 28)
   配件: null,
 };
 

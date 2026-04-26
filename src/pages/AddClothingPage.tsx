@@ -1,7 +1,7 @@
 import { ChangeEvent, ReactNode, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWardrobe } from '../context/WardrobeContext';
-import { blobToDataURL, removeBackground } from '../services/imageProcessing';
+import { blobToDataURL, cropTransparent, removeBackground } from '../services/imageProcessing';
 import { saveClothing } from '../services/storage';
 import { EditorCanvas } from '../services/editorCanvas';
 import AnchorPicker from '../components/AnchorPicker';
@@ -99,10 +99,13 @@ function PinchZoomWrapper({
   );
 }
 
+// Labels describe the visual side of the garment IMAGE (not the wearer).
+// We add the "(圖片左/右側)" qualifier so users don't need to think about
+// mirroring when they lay the garment flat.
 function anchorLabels(category: string) {
-  if (category === '下著') return { left: '左腰側', right: '右腰側' };
-  if (category === '鞋子') return { left: '左鞋上緣', right: '右鞋上緣' };
-  return { left: '左肩', right: '右肩' };
+  if (category === '下著') return { left: '左腰（圖片左側）', right: '右腰（圖片右側）' };
+  if (category === '鞋子') return { left: '左鞋上緣（圖片左側）', right: '右鞋上緣（圖片右側）' };
+  return { left: '左肩（圖片左側）', right: '右肩（圖片右側）' };
 }
 
 export default function AddClothingPage() {
@@ -171,9 +174,12 @@ export default function AddClothingPage() {
 
   const handleUndo = () => editorRef.current?.undo();
 
-  const goToAnchorStep = () => {
+  const goToAnchorStep = async () => {
     if (!editorRef.current) return;
-    const dataUrl = editorRef.current.exportDataURL();
+    const raw = editorRef.current.exportDataURL();
+    // Tight-crop so the garment fills its bounding box. This makes the
+    // category placement box and pose-anchored fit much more accurate.
+    const dataUrl = await cropTransparent(raw, 12);
     setEditedDataUrl(dataUrl);
     setAnchors(defaultAnchorsForCategory(category));
     if (ANCHORS_USED_BY_CATEGORY[category]) {
