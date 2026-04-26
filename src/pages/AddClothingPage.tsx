@@ -176,7 +176,37 @@ export default function AddClothingPage() {
   const [bgRemoved, setBgRemoved] = useState(false);
   const [bgBusy, setBgBusy] = useState(false);
   const [cleanupBusy, setCleanupBusy] = useState<null | string>(null);
-  const [cleanupMenuOpen, setCleanupMenuOpen] = useState(false);
+  const [cleanupModelId, setCleanupModelId] = useState<string>(
+    () => localStorage.getItem('pw_cleanup_model') || 'puter',
+  );
+  useEffect(() => {
+    localStorage.setItem('pw_cleanup_model', cleanupModelId);
+  }, [cleanupModelId]);
+  const [showCleanupPicker, setShowCleanupPicker] = useState(false);
+
+  type CleanupOption = {
+    id: string;
+    label: string;
+    icon: string;
+    description: string;
+    needsToken?: boolean;
+  };
+  const cleanupOptions: CleanupOption[] = [
+    {
+      id: 'puter',
+      label: 'Google Nano Banana (Puter)',
+      icon: '🍌',
+      description: 'Puter 代理 Gemini 影像模型。免費但每日有限額（10–20 次後 rate-limit）。首次需登入 Puter 帳號。',
+    },
+    ...CLEANUP_PRESETS.map((p) => ({
+      id: p.id,
+      label: p.label,
+      icon: p.needsToken ? '🔒' : '🤗',
+      description: p.description,
+      needsToken: p.needsToken,
+    })),
+  ];
+  const currentCleanupOption = cleanupOptions.find((o) => o.id === cleanupModelId) ?? cleanupOptions[0];
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
 
   // anchors
@@ -256,7 +286,6 @@ export default function AddClothingPage() {
     const ed = editorRef.current;
     if (!ed) return;
     setCleanupBusy(kind);
-    setCleanupMenuOpen(false);
     setStatusMsg(null);
     setErrorMsg(null);
     try {
@@ -438,45 +467,25 @@ export default function AddClothingPage() {
               {bgBusy ? '處理中…' : bgRemoved ? '✓ 已去背' : '🪄 AI 去背'}
             </button>
 
-            {/* AI cleanup dropdown */}
-            <div className="relative">
-              <button
-                onClick={() => setCleanupMenuOpen((s) => !s)}
-                disabled={editorBusy}
-                className="px-3 py-1.5 rounded bg-walnut-700 hover:bg-walnut-800 text-cream-50 text-xs disabled:opacity-50 inline-flex items-center gap-1"
-              >
-                {cleanupBusy && cleanupBusy !== 'canvas' ? '處理中…' : '✨ AI 還原原色'}
-                <span className="text-[10px]">▾</span>
-              </button>
-              {cleanupMenuOpen && (
-                <>
-                  <div className="fixed inset-0 z-30" onClick={() => setCleanupMenuOpen(false)} />
-                  <div className="absolute z-40 mt-1 w-72 bg-white rounded-lg border border-cream-200 shadow-lg overflow-hidden">
-                    <button
-                      onClick={() => runCleanup('puter')}
-                      disabled={editorBusy}
-                      className="w-full text-left px-3 py-2 hover:bg-cream-50 border-b border-cream-100"
-                    >
-                      <p className="text-sm font-medium text-walnut-700">🍌 Google Nano Banana</p>
-                      <p className="text-[11px] text-stone-500">Puter 代理 Gemini，需登入 Puter（每日有額度）</p>
-                    </button>
-                    {CLEANUP_PRESETS.map((p) => (
-                      <button
-                        key={p.id}
-                        onClick={() => runCleanup(p.id)}
-                        disabled={editorBusy}
-                        className="w-full text-left px-3 py-2 hover:bg-cream-50 border-b border-cream-100"
-                      >
-                        <p className="text-sm font-medium text-walnut-700">
-                          {p.needsToken ? '🔒' : '🤗'} {p.label}
-                        </p>
-                        <p className="text-[11px] text-stone-500">{p.description}</p>
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
+            {/* AI cleanup — model chip + action button (mirrors AI 試穿 UX) */}
+            <button
+              onClick={() => runCleanup(cleanupModelId)}
+              disabled={editorBusy}
+              className="px-3 py-1.5 rounded bg-walnut-700 hover:bg-walnut-800 text-cream-50 text-xs disabled:opacity-50"
+              title={`使用 ${currentCleanupOption.label} 重繪商品圖`}
+            >
+              {cleanupBusy && cleanupBusy !== 'canvas' ? '處理中…' : '✨ AI 還原原色'}
+            </button>
+            <button
+              onClick={() => setShowCleanupPicker(true)}
+              disabled={editorBusy}
+              className="px-2.5 py-1.5 rounded bg-cream-100 text-walnut-700 text-xs hover:bg-cream-200 inline-flex items-center gap-1"
+              title="切換 AI 還原使用的模型"
+            >
+              <span>{currentCleanupOption.icon}</span>
+              <span className="hidden sm:inline">{currentCleanupOption.label.replace(/ \(.*\)$/, '')}</span>
+              <span className="text-[10px]">▾</span>
+            </button>
 
             <button
               onClick={() => runCleanup('canvas')}
@@ -716,6 +725,69 @@ export default function AddClothingPage() {
             >
               {step === 'saving' ? '儲存中…' : '儲存到衣櫥'}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Cleanup model picker modal */}
+      {showCleanupPicker && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="wood-card max-w-lg w-full p-5 space-y-4 bg-white max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <h3 className="text-lg font-bold text-walnut-700">✨ AI 還原原色 — 選擇模型</h3>
+                <p className="text-xs text-stone-500 mt-1">
+                  把衣物照重繪成商品圖等級的乾淨平拍。完成後會自動再去背一次。
+                </p>
+              </div>
+              <button
+                onClick={() => setShowCleanupPicker(false)}
+                className="text-2xl leading-none text-stone-400 hover:text-walnut-700"
+                aria-label="關閉"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-2">
+              {cleanupOptions.map((o) => {
+                const isSelected = cleanupModelId === o.id;
+                return (
+                  <button
+                    key={o.id}
+                    onClick={() => {
+                      setCleanupModelId(o.id);
+                      setShowCleanupPicker(false);
+                    }}
+                    className={`text-left p-3 rounded-lg border transition-all ${
+                      isSelected
+                        ? 'border-walnut-700 bg-cream-50 ring-2 ring-walnut-700/30'
+                        : 'border-cream-200 bg-white hover:border-brand-400'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm text-walnut-700">
+                          {o.icon} {o.label}
+                        </p>
+                        <p className="text-[11px] text-stone-500 mt-1 leading-relaxed">{o.description}</p>
+                      </div>
+                      {o.needsToken && (
+                        <span className="shrink-0 text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
+                          需 Token
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <p className="text-[11px] text-stone-500 leading-relaxed">
+              💡 標 🔒 的模型需要 HuggingFace Token（在「✨ AI 試穿」頁面右上 ⚙️ 模型 chip 設定一次即可，兩處共用）。
+              標 🍌 的 Puter 模型每日有額度但不用 token。
+              不想設定的話用「🎨 本機調色」按鈕（瞬間完成、輕度色偏）。
+            </p>
           </div>
         </div>
       )}
