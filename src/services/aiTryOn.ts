@@ -173,49 +173,51 @@ function isResolveError(err: unknown): boolean {
   return /could not resolve app|unable to fetch app config|space (?:is sleeping|not found)/i.test(msg);
 }
 
+function connectWithTimeout(
+  spaceId: string,
+  options: any,
+  timeoutMs: number,
+): Promise<any> {
+  return Promise.race([
+    Client.connect(spaceId, options),
+    new Promise<never>((_, reject) =>
+      setTimeout(
+        () =>
+          reject(
+            new Error(
+              `連接 ${spaceId} 逾時（${Math.round(timeoutMs / 1000)} 秒）。可能原因：Space 在睡眠／需要 HuggingFace 帳號授權／CORS 阻擋。`,
+            ),
+          ),
+        timeoutMs,
+      ),
+    ),
+  ]);
+}
+
 export async function runVirtualTryOn(
   personImageDataUrl: string,
   garmentImageDataUrl: string,
   opts: RunOptions,
 ): Promise<RunResult> {
   const { onStatus } = opts;
-
-  // Build try-list: user's chosen Space first, then fallbacks in order.
-  // Skip duplicates so we don't re-try the same one.
-  const tried = new Set<string>();
-  const queue = [{ spaceId: opts.spaceId, endpoint: opts.endpoint || DEFAULT_CONFIG.endpoint! }];
-  for (const fb of FALLBACK_SPACES) {
-    const key = `${fb.spaceId}@${fb.endpoint}`;
-    if (key === `${opts.spaceId}@${opts.endpoint || DEFAULT_CONFIG.endpoint}`) continue;
-    queue.push(fb);
-  }
-
-  let lastError: unknown = null;
-  for (const candidate of queue) {
-    const key = `${candidate.spaceId}@${candidate.endpoint}`;
-    if (tried.has(key)) continue;
-    tried.add(key);
-    try {
-      onStatus?.('connect', `連接 ${candidate.spaceId}…`);
-      return await runOneSpace(personImageDataUrl, garmentImageDataUrl, {
-        ...opts,
-        spaceId: candidate.spaceId,
-        endpoint: candidate.endpoint,
-      });
-    } catch (err) {
-      lastError = err;
-      if (isResolveError(err)) {
-        onStatus?.('connect', `${candidate.spaceId} 連不上，嘗試備援 Space…`);
-        continue; // try next
-      }
-      // Non-recoverable error — bubble up immediately
-      throw err;
+  // Single attempt with timeout — no auto-fallback chain because trying 7
+  // sleeping Spaces in sequence would block the user for 5+ minutes.
+  // Users switch Spaces manually via the picker.
+  onStatus?.('connect', `連接 ${opts.spaceId}…`);
+  try {
+    return await runOneSpace(personImageDataUrl, garmentImageDataUrl, opts);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (isResolveError(err) || /timeout|逾時/i.test(msg)) {
+      throw new Error(
+        `${msg}\n\n💡 建議：\n` +
+          '1. 點上方「🤗 模型」chip 切換到其他 Space（例如 Kolors-VTON / CatVTON）\n' +
+          '2. 在進階設定貼上你的 HuggingFace Token（在 huggingface.co/settings/tokens 免費申請；許多 Space 在 2026 起需登入才有 GPU 額度）\n' +
+          '3. 改用 Puter Nano Banana（每日有額度限制）',
+      );
     }
+    throw err;
   }
-  const msg = lastError instanceof Error ? lastError.message : String(lastError);
-  throw new Error(
-    `所有公共 Space 都連不上（最後錯誤：${msg}）。\n常見原因：Space 在睡眠（剛喚醒需 30–60 秒）/ 已下線 / CORS 阻擋。\n建議：到右上 ⚙️ HF Space 設定改用其他 Space，或稍後重試。`,
-  );
 }
 
 async function runOneSpace(
@@ -224,9 +226,18 @@ async function runOneSpace(
   opts: RunOptions,
 ): Promise<RunResult> {
   const { onStatus } = opts;
-  const client = await Client.connect(opts.spaceId, {
-    token: (opts.hfToken as `hf_${string}` | undefined) || undefined,
-  });
+  const client = await connectWithTimeout(
+    opts.spaceId,
+    {
+      token: (opts.hfToken as `hf_${string}` | undefined) || undefined,
+      status_callback: (status: any) => {
+        const s = status?.status || 'connecting';
+        const detail = status?.detail || '';
+        onStatus?.('connect', `Space 狀態：${s}${detail ? ` (${detail})` : ''}`);
+      },
+    },
+    60_000,
+  );
 
   onStatus?.('queue', '上傳影像並排隊…');
   const personBlob = await dataUrlToBlob(personImageDataUrl);

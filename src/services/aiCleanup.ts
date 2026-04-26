@@ -93,9 +93,29 @@ export async function aiCleanupViaHFSpace(
   dataUrl: string,
   preset: HFCleanupPreset,
   onStatus?: (msg: string) => void,
+  hfToken?: string,
 ): Promise<string> {
   onStatus?.(`連接 ${preset.spaceId}…`);
-  const client = await Client.connect(preset.spaceId);
+  const client = await Promise.race([
+    Client.connect(preset.spaceId, {
+      token: (hfToken as `hf_${string}` | undefined) || undefined,
+      status_callback: (status: any) => {
+        const s = status?.status || 'connecting';
+        onStatus?.(`Space 狀態：${s}`);
+      },
+    } as any),
+    new Promise<never>((_, reject) =>
+      setTimeout(
+        () =>
+          reject(
+            new Error(
+              `連接 ${preset.spaceId} 逾時（60 秒）。可能 Space 在睡眠或需要 HF Token；請改試其他模型或在設定貼 Token。`,
+            ),
+          ),
+        60_000,
+      ),
+    ),
+  ]);
   const blob = await fetch(dataUrl).then((r) => r.blob());
   const file = handle_file(blob);
 
