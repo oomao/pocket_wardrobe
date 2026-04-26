@@ -26,6 +26,16 @@ export const DEFAULT_CONFIG: AITryOnConfig = {
   endpoint: '/tryon',
 };
 
+// Fallback chain — if the user's chosen Space can't be resolved (sleeping
+// / removed / CORS blocked), we try these in order. All are public
+// virtual-try-on Spaces that are usually awake.
+export const FALLBACK_SPACES: Array<{ spaceId: string; endpoint: string }> = [
+  { spaceId: 'Kwai-Kolors/Kolors-Virtual-Try-On', endpoint: '/tryon' },
+  { spaceId: 'levihsu/OOTDiffusion',              endpoint: '/predict' },
+  { spaceId: 'zhengchong/CatVTON',                endpoint: '/process' },
+  { spaceId: 'yisol/IDM-VTON',                    endpoint: '/predict' },
+];
+
 // Map our wardrobe categories to the cloth-type taxonomy commonly used by
 // VTON models. Most spaces accept upper / lower / overall / dress.
 export function mapCategoryToClothType(category: string): string {
@@ -78,14 +88,62 @@ export interface RunResult {
   raw: unknown;
 }
 
+function isResolveError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /could not resolve app|unable to fetch app config|space (?:is sleeping|not found)/i.test(msg);
+}
+
 export async function runVirtualTryOn(
   personImageDataUrl: string,
   garmentImageDataUrl: string,
   opts: RunOptions,
 ): Promise<RunResult> {
   const { onStatus } = opts;
-  onStatus?.('connect', `連接 ${opts.spaceId}…`);
 
+  // Build try-list: user's chosen Space first, then fallbacks in order.
+  // Skip duplicates so we don't re-try the same one.
+  const tried = new Set<string>();
+  const queue = [{ spaceId: opts.spaceId, endpoint: opts.endpoint || DEFAULT_CONFIG.endpoint! }];
+  for (const fb of FALLBACK_SPACES) {
+    const key = `${fb.spaceId}@${fb.endpoint}`;
+    if (key === `${opts.spaceId}@${opts.endpoint || DEFAULT_CONFIG.endpoint}`) continue;
+    queue.push(fb);
+  }
+
+  let lastError: unknown = null;
+  for (const candidate of queue) {
+    const key = `${candidate.spaceId}@${candidate.endpoint}`;
+    if (tried.has(key)) continue;
+    tried.add(key);
+    try {
+      onStatus?.('connect', `連接 ${candidate.spaceId}…`);
+      return await runOneSpace(personImageDataUrl, garmentImageDataUrl, {
+        ...opts,
+        spaceId: candidate.spaceId,
+        endpoint: candidate.endpoint,
+      });
+    } catch (err) {
+      lastError = err;
+      if (isResolveError(err)) {
+        onStatus?.('connect', `${candidate.spaceId} 連不上，嘗試備援 Space…`);
+        continue; // try next
+      }
+      // Non-recoverable error — bubble up immediately
+      throw err;
+    }
+  }
+  const msg = lastError instanceof Error ? lastError.message : String(lastError);
+  throw new Error(
+    `所有公共 Space 都連不上（最後錯誤：${msg}）。\n常見原因：Space 在睡眠（剛喚醒需 30–60 秒）/ 已下線 / CORS 阻擋。\n建議：到右上 ⚙️ HF Space 設定改用其他 Space，或稍後重試。`,
+  );
+}
+
+async function runOneSpace(
+  personImageDataUrl: string,
+  garmentImageDataUrl: string,
+  opts: RunOptions,
+): Promise<RunResult> {
+  const { onStatus } = opts;
   const client = await Client.connect(opts.spaceId, {
     token: (opts.hfToken as `hf_${string}` | undefined) || undefined,
   });
