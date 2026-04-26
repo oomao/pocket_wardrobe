@@ -1,7 +1,12 @@
 import { ChangeEvent, ReactNode, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWardrobe } from '../context/WardrobeContext';
-import { blobToDataURL, cropTransparent, removeBackground } from '../services/imageProcessing';
+import {
+  blobToDataURL,
+  cropTransparent,
+  extractDominantColor,
+  removeBackground,
+} from '../services/imageProcessing';
 import { saveClothing } from '../services/storage';
 import { EditorCanvas } from '../services/editorCanvas';
 import { aiCleanupCanvas, aiCleanupViaPuter } from '../services/aiCleanup';
@@ -9,13 +14,14 @@ import AnchorPicker from '../components/AnchorPicker';
 import {
   ANCHORS_USED_BY_CATEGORY,
   ClothingAnchors,
+  DEFAULT_OCCASIONS,
+  Season,
+  SEASONS,
   defaultAnchorsForCategory,
 } from '../types';
 
-type Step = 'idle' | 'removing' | 'editing' | 'anchors' | 'meta' | 'saving';
+type Step = 'idle' | 'editing' | 'anchors' | 'meta' | 'saving';
 
-// Wrapper that handles two-finger pinch to drive the zoom slider, and lets
-// single-finger / mouse events fall through to the canvas (eraser).
 function PinchZoomWrapper({
   children,
   zoom,
@@ -100,9 +106,6 @@ function PinchZoomWrapper({
   );
 }
 
-// Labels describe the visual side of the garment IMAGE (not the wearer).
-// We add the "(圖片左/右側)" qualifier so users don't need to think about
-// mirroring when they lay the garment flat.
 function anchorLabels(category: string) {
   if (category === '下著') return { left: '左腰（圖片左側）', right: '右腰（圖片右側）' };
   if (category === '鞋子') return { left: '左鞋上緣（圖片左側）', right: '右鞋上緣（圖片右側）' };
@@ -117,17 +120,36 @@ export default function AddClothingPage() {
 
   const [step, setStep] = useState<Step>('idle');
   const [progress, setProgress] = useState<{ key: string; current: number; total: number } | null>(null);
+
+  // basic meta
   const [name, setName] = useState('');
   const [category, setCategory] = useState(categories[0] ?? '');
+
+  // editor state
   const [eraserOn, setEraserOn] = useState(false);
   const [brushSize, setBrushSize] = useState(30);
   const [zoom, setZoom] = useState(100);
   const [canUndo, setCanUndo] = useState(false);
+
+  // pipeline state
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [bgRemoved, setBgRemoved] = useState(false);
+  const [bgBusy, setBgBusy] = useState(false);
+  const [cleanupBusy, setCleanupBusy] = useState<null | 'puter' | 'canvas'>(null);
+  const [statusMsg, setStatusMsg] = useState<string | null>(null);
+
+  // anchors
   const [editedDataUrl, setEditedDataUrl] = useState<string | null>(null);
   const [anchors, setAnchors] = useState<ClothingAnchors>(defaultAnchorsForCategory('上衣'));
-  const [cleanupBusy, setCleanupBusy] = useState<null | 'puter' | 'canvas'>(null);
-  const [cleanupMsg, setCleanupMsg] = useState<string | null>(null);
+
+  // rich attributes (first-wave)
+  const [color, setColor] = useState<string>('#8b5a2b');
+  const [brand, setBrand] = useState('');
+  const [seasons, setSeasons] = useState<Season[]>([]);
+  const [occasions, setOccasions] = useState<string[]>([]);
+  const [price, setPrice] = useState('');
+  const [purchaseDate, setPurchaseDate] = useState('');
+  const [notes, setNotes] = useState('');
 
   useEffect(() => {
     if (!category && categories.length) setCategory(categories[0]);
@@ -142,13 +164,10 @@ export default function AddClothingPage() {
     e.target.value = '';
     if (!file) return;
     setErrorMsg(null);
-    setStep('removing');
-    setProgress(null);
+    setBgRemoved(false);
+    setStatusMsg(null);
     try {
-      const blob = await removeBackground(file, (key, current, total) =>
-        setProgress({ key, current, total }),
-      );
-      const dataUrl = await blobToDataURL(blob);
+      const dataUrl = await blobToDataURL(file);
       if (!canvasRef.current) return;
       const ed = new EditorCanvas(canvasRef.current);
       ed.setOnChange(() => setCanUndo(ed.canUndo()));
@@ -159,8 +178,68 @@ export default function AddClothingPage() {
       setStep('editing');
     } catch (err) {
       console.error(err);
-      setErrorMsg('去背失敗，請改用其他圖片再試。');
-      setStep('idle');
+      setErrorMsg('載入圖片失敗，請改用其他檔案再試。');
+    }
+  };
+
+  const runBgRemoval = async () => {
+    const ed = editorRef.current;
+    if (!ed) return;
+    setBgBusy(true);
+    setProgress(null);
+    setStatusMsg('AI 去背中…');
+    setErrorMsg(null);
+    try {
+      const current = ed.exportDataURL();
+      const blob = await fetch(current).then((r) => r.blob());
+      const removed = await removeBackground(blob, (key, currentP, total) =>
+        setProgress({ key, current: currentP, total }),
+      );
+      let next = await blobToDataURL(removed);
+      next = await cropTransparent(next, 12);
+      await ed.replaceImage(next);
+      setCanUndo(false);
+      setBgRemoved(true);
+      setStatusMsg('AI 去背完成 ✅');
+    } catch (err: any) {
+      console.error(err);
+      setErrorMsg(`去背失敗：${err?.message || String(err)}`);
+      setStatusMsg(null);
+    } finally {
+      setBgBusy(false);
+    }
+  };
+
+  const runCleanup = async (kind: 'puter' | 'canvas') => {
+    const ed = editorRef.current;
+    if (!ed) return;
+    setCleanupBusy(kind);
+    setStatusMsg(null);
+    setErrorMsg(null);
+    try {
+      const current = ed.exportDataURL();
+      let next =
+        kind === 'puter'
+          ? await aiCleanupViaPuter(current, (m) => setStatusMsg(m))
+          : await aiCleanupCanvas(current);
+
+      if (kind === 'puter') {
+        setStatusMsg('AI 完成，重新去背中…');
+        const blob = await fetch(next).then((r) => r.blob());
+        const cleaned = await removeBackground(blob);
+        next = await blobToDataURL(cleaned);
+        next = await cropTransparent(next, 12);
+        setBgRemoved(true);
+      }
+      await ed.replaceImage(next);
+      setCanUndo(false);
+      setStatusMsg(kind === 'puter' ? 'AI 還原完成 ✅' : '自動調色完成 ✅');
+    } catch (err: any) {
+      console.error(err);
+      setErrorMsg(`處理失敗：${err?.message || String(err)}`);
+      setStatusMsg(null);
+    } finally {
+      setCleanupBusy(null);
     }
   };
 
@@ -169,64 +248,33 @@ export default function AddClothingPage() {
     setEraserOn(next);
     editorRef.current?.enableEraser(next);
   };
-
   const onBrushChange = (n: number) => {
     setBrushSize(n);
     editorRef.current?.setBrushSize(n);
   };
-
   const handleUndo = () => editorRef.current?.undo();
-
-  const runCleanup = async (kind: 'puter' | 'canvas') => {
-    const ed = editorRef.current;
-    if (!ed) return;
-    setCleanupBusy(kind);
-    setCleanupMsg(null);
-    setErrorMsg(null);
-    try {
-      const current = ed.exportDataURL();
-      let next =
-        kind === 'puter'
-          ? await aiCleanupViaPuter(current, (m) => setCleanupMsg(m))
-          : await aiCleanupCanvas(current);
-
-      // Puter's AI re-renders with a fresh (usually pure white) background.
-      // Run bg removal + transparent crop again so the editor canvas stays
-      // transparent and the saved garment hugs its bbox.
-      if (kind === 'puter') {
-        setCleanupMsg('AI 完成，重新去背中…');
-        const blob = await fetch(next).then((r) => r.blob());
-        const cleaned = await removeBackground(blob);
-        next = await blobToDataURL(cleaned);
-        next = await cropTransparent(next, 12);
-      }
-
-      await ed.replaceImage(next);
-      setCanUndo(false);
-      setCleanupMsg(kind === 'puter' ? 'AI 還原完成 ✅' : '自動調色完成 ✅');
-    } catch (err: any) {
-      console.error(err);
-      setErrorMsg(`處理失敗：${err?.message || String(err)}`);
-      setCleanupMsg(null);
-    } finally {
-      setCleanupBusy(null);
-    }
-  };
 
   const goToAnchorStep = async () => {
     if (!editorRef.current) return;
     const raw = editorRef.current.exportDataURL();
-    // Tight-crop so the garment fills its bounding box. This makes the
-    // category placement box and pose-anchored fit much more accurate.
-    const dataUrl = await cropTransparent(raw, 12);
+    const dataUrl = bgRemoved ? await cropTransparent(raw, 12) : raw;
     setEditedDataUrl(dataUrl);
     setAnchors(defaultAnchorsForCategory(category));
-    if (ANCHORS_USED_BY_CATEGORY[category]) {
-      setStep('anchors');
-    } else {
-      setStep('meta');
+    // Auto extract dominant colour for the picker
+    try {
+      const c = await extractDominantColor(dataUrl);
+      setColor(c);
+    } catch {
+      /* ignore */
     }
+    if (ANCHORS_USED_BY_CATEGORY[category]) setStep('anchors');
+    else setStep('meta');
   };
+
+  const toggleSeason = (s: Season) =>
+    setSeasons((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
+  const toggleOccasion = (o: string) =>
+    setOccasions((prev) => (prev.includes(o) ? prev.filter((x) => x !== o) : [...prev, o]));
 
   const handleSave = async () => {
     if (!editedDataUrl) return;
@@ -237,26 +285,35 @@ export default function AddClothingPage() {
       imageBase64: editedDataUrl,
       category,
       anchors: ANCHORS_USED_BY_CATEGORY[category] ? anchors : undefined,
+      color,
+      brand: brand.trim() || undefined,
+      seasons: seasons.length ? seasons : undefined,
+      occasions: occasions.length ? occasions : undefined,
+      price: price ? Number(price) : undefined,
+      purchaseDate: purchaseDate ? new Date(purchaseDate).getTime() : undefined,
+      notes: notes.trim() || undefined,
+      wearCount: 0,
     });
     navigate('/');
   };
 
   const labels = anchorLabels(category);
+  const editorBusy = bgBusy || cleanupBusy !== null;
 
   return (
     <div>
       <div className="mb-5">
         <h2 className="text-3xl font-bold text-walnut-700">新增衣物</h2>
         <p className="text-sm text-walnut-500/70 mt-1">
-          拍照或選擇照片 → AI 自動去背 → 微調 → 標對齊點 → 儲存
+          上傳照片 → 編輯（去背 / 還原原色 / 微調，皆為選用）→ 標對齊點 → 命名儲存
         </p>
       </div>
 
       {/* Step indicator */}
-      {step !== 'idle' && step !== 'removing' && (
+      {step !== 'idle' && (
         <ol className="flex flex-wrap gap-2 mb-4 text-xs">
           {[
-            { k: 'editing', label: '1. 微調' },
+            { k: 'editing', label: '1. 處理圖片' },
             { k: 'anchors', label: '2. 對齊點' },
             { k: 'meta', label: '3. 命名儲存' },
           ].map((s) => (
@@ -276,72 +333,76 @@ export default function AddClothingPage() {
 
       {step === 'idle' && (
         <div className="wood-card p-6">
-          <p className="text-sm text-gray-600 mb-4">
-            請選擇一張衣服照片，系統會自動進行 AI 去背（首次載入需下載模型約 24MB）。
+          <p className="text-sm text-stone-600 mb-4">
+            選一張衣服照片開始。<strong>去背 / AI 還原原色 / 自動調色</strong> 都是進到編輯後可選用的工具，預設不會自動跑。
           </p>
           <div className="grid sm:grid-cols-2 gap-3">
-            <label className="flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-brand-500 hover:bg-brand-50 transition">
+            <label className="flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed border-cream-200 rounded-lg cursor-pointer hover:border-brand-400 hover:bg-cream-50 transition">
               <span className="text-4xl">📷</span>
-              <span className="font-medium">拍照</span>
-              <span className="text-xs text-gray-500">使用手機/裝置相機拍攝</span>
+              <span className="font-medium text-walnut-700">拍照</span>
+              <span className="text-xs text-stone-500">使用手機 / 裝置相機拍攝</span>
               <input type="file" accept="image/*" capture="environment" onChange={handleFile} className="hidden" />
             </label>
-            <label className="flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-brand-500 hover:bg-brand-50 transition">
+            <label className="flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed border-cream-200 rounded-lg cursor-pointer hover:border-brand-400 hover:bg-cream-50 transition">
               <span className="text-4xl">🖼️</span>
-              <span className="font-medium">從相簿/檔案上傳</span>
-              <span className="text-xs text-gray-500">選擇已存在的圖片檔</span>
+              <span className="font-medium text-walnut-700">從相簿 / 檔案上傳</span>
+              <span className="text-xs text-stone-500">選擇已存在的圖片檔</span>
               <input type="file" accept="image/*" onChange={handleFile} className="hidden" />
             </label>
           </div>
-          {errorMsg && <p className="text-red-500 text-sm mt-3">{errorMsg}</p>}
-        </div>
-      )}
-
-      {step === 'removing' && (
-        <div className="wood-card p-6">
-          <p className="font-medium">AI 去背處理中…</p>
-          {progress && (
-            <p className="text-xs text-gray-500 mt-1">
-              {progress.key}: {progress.current} / {progress.total}
-            </p>
-          )}
-          <div className="mt-3 h-2 bg-gray-200 rounded overflow-hidden">
-            <div
-              className="h-full bg-brand-500 transition-all"
-              style={{ width: progress ? `${(progress.current / Math.max(progress.total, 1)) * 100}%` : '20%' }}
-            />
-          </div>
+          {errorMsg && <p className="text-rose-600 text-sm mt-3">{errorMsg}</p>}
         </div>
       )}
 
       {/* Step 1: editor */}
       <div className={step === 'editing' ? 'block' : 'hidden'}>
-        {/* Cleanup row */}
-        <div className="wood-card p-3 mb-3 flex flex-wrap gap-2 items-center">
-          <span className="text-xs text-gray-500 mr-1">還原服飾原色：</span>
-          <button
-            onClick={() => runCleanup('puter')}
-            disabled={cleanupBusy !== null}
-            className="px-3 py-1.5 rounded bg-gray-900 text-white text-xs disabled:opacity-50 hover:bg-black"
-            title="呼叫 Google Nano Banana 重繪商品圖。首次使用需登入 Puter（30 秒、免費）。"
-          >
-            {cleanupBusy === 'puter' ? '處理中…' : '✨ AI 還原原色'}
-          </button>
-          <button
-            onClick={() => runCleanup('canvas')}
-            disabled={cleanupBusy !== null}
-            className="px-3 py-1.5 rounded bg-white border border-cream-200 hover:border-brand-400 text-xs disabled:opacity-50"
-            title="本機自動白平衡 + 對比 / 飽和度微調。瞬間完成，無需註冊。"
-          >
-            {cleanupBusy === 'canvas' ? '處理中…' : '🎨 自動調色（本機）'}
-          </button>
-          {cleanupMsg && <span className="text-xs text-emerald-600">{cleanupMsg}</span>}
+        {/* Pipeline buttons (all opt-in) */}
+        <div className="wood-card p-3 mb-3 space-y-2">
+          <p className="text-xs text-stone-500">圖片處理（可任意組合 / 跳過）：</p>
+          <div className="flex flex-wrap gap-2 items-center">
+            <button
+              onClick={runBgRemoval}
+              disabled={editorBusy}
+              className={`px-3 py-1.5 rounded text-xs disabled:opacity-50 ${
+                bgRemoved ? 'bg-emerald-100 text-emerald-700' : 'bg-walnut-700 text-cream-50 hover:bg-walnut-800'
+              }`}
+              title="呼叫 imgly 去背模型（首次 ~24MB）。儲存到衣櫥前建議至少做一次。"
+            >
+              {bgBusy ? '處理中…' : bgRemoved ? '✓ 已去背' : '🪄 AI 去背'}
+            </button>
+            <button
+              onClick={() => runCleanup('puter')}
+              disabled={editorBusy}
+              className="px-3 py-1.5 rounded bg-walnut-700 hover:bg-walnut-800 text-cream-50 text-xs disabled:opacity-50"
+              title="呼叫 Google Nano Banana 重繪商品圖。會自動再去背一次。首次需登入 Puter（免費）。"
+            >
+              {cleanupBusy === 'puter' ? '處理中…' : '✨ AI 還原原色'}
+            </button>
+            <button
+              onClick={() => runCleanup('canvas')}
+              disabled={editorBusy}
+              className="px-3 py-1.5 rounded bg-white border border-cream-200 hover:border-brand-400 text-xs disabled:opacity-50"
+              title="本機微調白平衡 + 對比 / 飽和度。瞬間完成。"
+            >
+              {cleanupBusy === 'canvas' ? '處理中…' : '🎨 自動調色（本機）'}
+            </button>
+            {statusMsg && <span className="text-xs text-emerald-600">{statusMsg}</span>}
+          </div>
+          {progress && bgBusy && (
+            <div className="h-1.5 bg-cream-100 rounded overflow-hidden">
+              <div
+                className="h-full bg-brand-500 transition-all"
+                style={{ width: `${(progress.current / Math.max(progress.total, 1)) * 100}%` }}
+              />
+            </div>
+          )}
         </div>
 
         <div className="wood-card p-4 mb-4">
           <div className="flex flex-wrap gap-3 items-center mb-3">
             <button
               onClick={toggleEraser}
+              disabled={editorBusy}
               className={`px-3 py-1.5 rounded text-sm ${
                 eraserOn ? 'bg-walnut-700 text-cream-50' : 'bg-cream-100 text-walnut-700'
               }`}
@@ -351,86 +412,54 @@ export default function AddClothingPage() {
             <button
               onClick={handleUndo}
               disabled={!canUndo}
-              className="px-3 py-1.5 rounded bg-gray-100 text-sm disabled:opacity-40"
+              className="px-3 py-1.5 rounded bg-cream-100 text-walnut-700 text-sm disabled:opacity-40"
             >
               ↶ 復原
             </button>
             <label className="flex items-center gap-2 text-sm">
               筆刷
-              <input
-                type="range"
-                min={4}
-                max={120}
-                value={brushSize}
-                onChange={(e) => onBrushChange(Number(e.target.value))}
-                className="w-24 sm:w-32"
-              />
-              <span className="text-gray-500 w-8 text-right">{brushSize}</span>
+              <input type="range" min={4} max={120} value={brushSize} onChange={(e) => onBrushChange(Number(e.target.value))} className="w-24 sm:w-32" />
+              <span className="text-stone-500 w-8 text-right">{brushSize}</span>
             </label>
             <label className="flex items-center gap-2 text-sm">
               縮放
-              <input
-                type="range"
-                min={25}
-                max={300}
-                step={5}
-                value={zoom}
-                onChange={(e) => setZoom(Number(e.target.value))}
-                className="w-24 sm:w-32"
-              />
-              <span className="text-gray-500 w-12 text-right">{zoom}%</span>
+              <input type="range" min={25} max={300} step={5} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} className="w-24 sm:w-32" />
+              <span className="text-stone-500 w-12 text-right">{zoom}%</span>
             </label>
           </div>
+
           <PinchZoomWrapper zoom={zoom} setZoom={setZoom} pannable={!eraserOn}>
-            <canvas
-              ref={canvasRef}
-              style={{ display: 'block', width: `${zoom}%`, height: 'auto', maxWidth: 'none' }}
-            />
+            <canvas ref={canvasRef} style={{ display: 'block', width: `${zoom}%`, height: 'auto', maxWidth: 'none' }} />
           </PinchZoomWrapper>
-          <p className="text-xs text-gray-400 mt-2">
-            💡 雙指可放大／縮小；單指（橡皮擦關閉時）可平移；桌機 Ctrl + 滾輪縮放。
+          <p className="text-xs text-stone-400 mt-2">
+            💡 雙指 / Ctrl+滾輪縮放；單指（橡皮擦關閉時）平移。
           </p>
         </div>
-        <div className="flex justify-end mb-8">
-          <select
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            className="border border-gray-300 rounded px-3 py-1.5 text-sm mr-2"
-          >
-            {categories.map((c) => (
-              <option key={c}>{c}</option>
-            ))}
+
+        <div className="flex justify-end mb-8 gap-2">
+          <select value={category} onChange={(e) => setCategory(e.target.value)} className="border border-cream-200 rounded px-3 py-1.5 text-sm">
+            {categories.map((c) => <option key={c}>{c}</option>)}
           </select>
-          <button
-            onClick={goToAnchorStep}
-            className="bg-walnut-700 hover:bg-walnut-800 text-cream-50 px-4 py-2 rounded text-sm"
-          >
+          <button onClick={goToAnchorStep} disabled={editorBusy} className="bg-walnut-700 hover:bg-walnut-800 text-cream-50 px-4 py-2 rounded text-sm disabled:opacity-50">
             下一步 →
           </button>
         </div>
+
+        {errorMsg && <p className="text-rose-600 text-sm">{errorMsg}</p>}
       </div>
 
       {/* Step 2: anchors */}
       {step === 'anchors' && editedDataUrl && (
         <div className="wood-card p-4 mb-4">
-          <p className="text-sm text-gray-700 mb-3">
+          <p className="text-sm text-walnut-700 mb-3">
             將兩個圓點分別拖到衣物的 <strong>{labels.left}</strong> 與 <strong>{labels.right}</strong>。試穿時系統會把這條對齊線旋轉、縮放，貼合您身體上對應的位置。
           </p>
-          <AnchorPicker
-            imageDataUrl={editedDataUrl}
-            anchors={anchors}
-            leftLabel={labels.left}
-            rightLabel={labels.right}
-            onChange={setAnchors}
-          />
+          <AnchorPicker imageDataUrl={editedDataUrl} anchors={anchors} leftLabel={labels.left} rightLabel={labels.right} onChange={setAnchors} />
           <div className="flex justify-between mt-4">
-            <button onClick={() => setStep('editing')} className="text-sm text-gray-500">
-              ← 回去微調
+            <button onClick={() => setStep('editing')} className="text-sm text-stone-500">
+              ← 回去編輯
             </button>
-            <button
-              onClick={() => setStep('meta')}
-              className="bg-walnut-700 hover:bg-walnut-800 text-cream-50 px-4 py-2 rounded text-sm"
-            >
+            <button onClick={() => setStep('meta')} className="bg-walnut-700 hover:bg-walnut-800 text-cream-50 px-4 py-2 rounded text-sm">
               下一步 →
             </button>
           </div>
@@ -439,49 +468,127 @@ export default function AddClothingPage() {
 
       {/* Step 3: meta + save */}
       {(step === 'meta' || step === 'saving') && editedDataUrl && (
-        <div className="wood-card p-4 grid gap-3 sm:grid-cols-3 items-end">
-          <div className="sm:col-span-1">
-            <p className="text-xs text-gray-500 mb-1">預覽</p>
-            <img src={editedDataUrl} alt="" className="max-h-40 mx-auto" />
+        <div className="grid lg:grid-cols-[260px_1fr] gap-4">
+          <div className="wood-card p-3">
+            <p className="text-xs text-stone-500 mb-2">預覽</p>
+            <img src={editedDataUrl} alt="" className="w-full max-h-72 object-contain bg-cream-50 rounded" />
+            <button
+              onClick={() => setStep(ANCHORS_USED_BY_CATEGORY[category] ? 'anchors' : 'editing')}
+              className="mt-3 text-xs text-stone-500 underline"
+            >
+              ← 返回上一步
+            </button>
           </div>
-          <label className="text-sm sm:col-span-1">
-            衣物名稱（選填）
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full mt-1 border border-gray-300 rounded px-2 py-1.5"
-              placeholder="例如：白色素T"
-            />
-          </label>
-          <div className="sm:col-span-1 flex flex-col gap-2">
-            <label className="text-sm">
-              分類
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="w-full mt-1 border border-gray-300 rounded px-2 py-1.5"
-              >
-                {categories.map((c) => (
-                  <option key={c}>{c}</option>
+
+          <div className="wood-card p-5 space-y-4">
+            {/* Basic */}
+            <div className="grid sm:grid-cols-2 gap-3">
+              <label className="text-sm text-walnut-700">
+                衣物名稱（選填）
+                <input value={name} onChange={(e) => setName(e.target.value)} className="w-full mt-1 border border-cream-200 rounded px-2 py-1.5 bg-white" placeholder="例如：白色素T" />
+              </label>
+              <label className="text-sm text-walnut-700">
+                分類（必填）
+                <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full mt-1 border border-cream-200 rounded px-2 py-1.5 bg-white">
+                  {categories.map((c) => <option key={c}>{c}</option>)}
+                </select>
+              </label>
+            </div>
+
+            {/* Color + Brand */}
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div>
+                <p className="text-sm text-walnut-700 mb-1">主色</p>
+                <div className="flex items-center gap-2">
+                  <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="h-9 w-14 rounded cursor-pointer border border-cream-200" />
+                  <input value={color} onChange={(e) => setColor(e.target.value)} className="flex-1 border border-cream-200 rounded px-2 py-1.5 text-sm font-mono bg-white" />
+                  <button
+                    onClick={async () => {
+                      try {
+                        const c = await extractDominantColor(editedDataUrl);
+                        setColor(c);
+                      } catch {/* */}
+                    }}
+                    className="px-2 py-1.5 rounded bg-cream-100 text-walnut-700 text-xs whitespace-nowrap"
+                    title="從圖片自動偵測主色"
+                  >
+                    🪄 自動偵測
+                  </button>
+                </div>
+              </div>
+              <label className="text-sm text-walnut-700">
+                品牌（選填）
+                <input value={brand} onChange={(e) => setBrand(e.target.value)} className="w-full mt-1 border border-cream-200 rounded px-2 py-1.5 bg-white" placeholder="例如：Uniqlo" />
+              </label>
+            </div>
+
+            {/* Seasons */}
+            <div>
+              <p className="text-sm text-walnut-700 mb-1.5">適用季節</p>
+              <div className="flex flex-wrap gap-2">
+                {SEASONS.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => toggleSeason(s.id)}
+                    className={`px-3 py-1 rounded-full text-sm border ${
+                      seasons.includes(s.id)
+                        ? 'bg-walnut-700 text-cream-50 border-walnut-700'
+                        : 'bg-white text-walnut-700 border-cream-200'
+                    }`}
+                  >
+                    {s.label}
+                  </button>
                 ))}
-              </select>
+              </div>
+            </div>
+
+            {/* Occasions */}
+            <div>
+              <p className="text-sm text-walnut-700 mb-1.5">場合</p>
+              <div className="flex flex-wrap gap-2">
+                {DEFAULT_OCCASIONS.map((o) => (
+                  <button
+                    key={o}
+                    onClick={() => toggleOccasion(o)}
+                    className={`px-3 py-1 rounded-full text-sm border ${
+                      occasions.includes(o)
+                        ? 'bg-walnut-700 text-cream-50 border-walnut-700'
+                        : 'bg-white text-walnut-700 border-cream-200'
+                    }`}
+                  >
+                    {o}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Price + purchase date */}
+            <div className="grid sm:grid-cols-2 gap-3">
+              <label className="text-sm text-walnut-700">
+                價格（NTD，選填）
+                <input type="number" min="0" value={price} onChange={(e) => setPrice(e.target.value)} className="w-full mt-1 border border-cream-200 rounded px-2 py-1.5 bg-white" placeholder="例如：590" />
+                <span className="text-[11px] text-stone-400">填了之後可看「平均單次穿著成本」</span>
+              </label>
+              <label className="text-sm text-walnut-700">
+                購買日期（選填）
+                <input type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} className="w-full mt-1 border border-cream-200 rounded px-2 py-1.5 bg-white" />
+              </label>
+            </div>
+
+            {/* Notes */}
+            <label className="text-sm text-walnut-700 block">
+              備註（選填）
+              <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full mt-1 border border-cream-200 rounded px-2 py-1.5 bg-white" rows={2} placeholder="任何要記下來的事，例如剪標 / 打折買、配什麼好看..." />
             </label>
+
             <button
               onClick={handleSave}
               disabled={step === 'saving'}
-              className="w-full bg-walnut-700 hover:bg-walnut-800 disabled:bg-stone-300 text-cream-50 py-2 rounded"
+              className="w-full bg-walnut-700 hover:bg-walnut-800 disabled:bg-stone-300 text-cream-50 py-2.5 rounded-lg font-medium"
             >
               {step === 'saving' ? '儲存中…' : '儲存到衣櫥'}
             </button>
           </div>
-          {step === 'meta' && (
-            <button
-              onClick={() => setStep(ANCHORS_USED_BY_CATEGORY[category] ? 'anchors' : 'editing')}
-              className="sm:col-span-3 text-xs text-gray-500 text-left"
-            >
-              ← 返回上一步
-            </button>
-          )}
         </div>
       )}
     </div>

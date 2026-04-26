@@ -103,6 +103,33 @@ export async function saveClothing(
   return item;
 }
 
+export async function updateClothing(
+  id: string,
+  patch: Partial<Omit<Clothing, 'id' | 'createdAt'>>,
+): Promise<Clothing | undefined> {
+  const all = await getAllClothing();
+  const idx = all.findIndex((c) => c.id === id);
+  if (idx === -1) return undefined;
+  const next = { ...all[idx], ...patch };
+  all[idx] = next;
+  await localforage.setItem(KEY_CLOTHES, all);
+  return next;
+}
+
+export async function incrementWearCounts(clothingIds: string[]): Promise<void> {
+  if (clothingIds.length === 0) return;
+  const all = await getAllClothing();
+  const ids = new Set(clothingIds);
+  let dirty = false;
+  for (const c of all) {
+    if (ids.has(c.id)) {
+      c.wearCount = (c.wearCount ?? 0) + 1;
+      dirty = true;
+    }
+  }
+  if (dirty) await localforage.setItem(KEY_CLOTHES, all);
+}
+
 export async function deleteClothing(id: string): Promise<boolean> {
   const all = await getAllClothing();
   const next = all.filter((c) => c.id !== id);

@@ -20,6 +20,17 @@ export interface ClothingAnchors {
   right: { x: number; y: number };
 }
 
+export type Season = 'spring' | 'summer' | 'autumn' | 'winter';
+
+export const SEASONS: { id: Season; label: string }[] = [
+  { id: 'spring', label: '春' },
+  { id: 'summer', label: '夏' },
+  { id: 'autumn', label: '秋' },
+  { id: 'winter', label: '冬' },
+];
+
+export const DEFAULT_OCCASIONS = ['日常', '上班', '運動', '約會', '正式', '居家'];
+
 export interface Clothing {
   id: string;
   name: string;
@@ -27,6 +38,21 @@ export interface Clothing {
   category: string;
   createdAt: number;
   anchors?: ClothingAnchors;
+  // First-wave attributes (盡簡衣櫥-style rich metadata)
+  color?: string;            // hex e.g. "#aabbcc" — auto-extracted on save
+  brand?: string;
+  seasons?: Season[];
+  occasions?: string[];
+  price?: number;            // currency-agnostic; UI shows NTD
+  purchaseDate?: number;     // ms timestamp
+  notes?: string;
+  wearCount?: number;        // incremented when an outfit / style using it is saved
+  archived?: boolean;        // soft-deleted into 'memory box'
+}
+
+export function costPerWear(c: Clothing): number | null {
+  if (!c.price || !c.wearCount || c.wearCount <= 0) return null;
+  return c.price / c.wearCount;
 }
 
 // Default normalized anchor positions, used to seed AnchorPicker before the

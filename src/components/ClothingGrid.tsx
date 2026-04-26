@@ -33,8 +33,22 @@ export default function ClothingGrid({ items, onClick, onDelete, emptyHint = '�
             />
           </div>
           <div className="px-3 py-2 border-t border-gray-50">
-            <p className="text-sm font-medium text-gray-800 truncate">{c.name || '未命名'}</p>
-            <p className="text-[11px] text-gray-400 mt-0.5">{c.category}</p>
+            <div className="flex items-center gap-1.5">
+              {c.color && (
+                <span
+                  className="inline-block w-2.5 h-2.5 rounded-full border border-cream-200 shrink-0"
+                  style={{ background: c.color }}
+                  title={c.color}
+                />
+              )}
+              <p className="text-sm font-medium text-gray-800 truncate">{c.name || '未命名'}</p>
+            </div>
+            <div className="flex items-center justify-between mt-0.5">
+              <p className="text-[11px] text-gray-400">{c.category}</p>
+              {(c.wearCount ?? 0) > 0 && (
+                <span className="text-[10px] text-stone-500">穿過 {c.wearCount} 次</span>
+              )}
+            </div>
           </div>
           {onDelete && (
             <button

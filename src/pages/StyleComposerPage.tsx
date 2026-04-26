@@ -10,6 +10,7 @@ import {
   getAllClothing,
   getClothingById,
   getStyleById,
+  incrementWearCounts,
   saveStyle,
   updateStyle,
 } from '../services/storage';
@@ -151,9 +152,10 @@ export default function StyleComposerPage() {
     } else {
       const newStyle = await saveStyle({ name, backgroundId: bgId, items, thumbnail });
       setSavedId(newStyle.id);
+      await incrementWearCounts(items.map((i) => i.clotheId));
       alert('造型已儲存');
     }
-    navigate('/styles');
+    navigate('/library');
   };
 
   return (

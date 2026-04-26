@@ -73,6 +73,50 @@ export async function cropTransparent(
   return out.toDataURL('image/png');
 }
 
+// Quick dominant-colour extraction for auto-tagging clothing on save.
+// Downsamples to 64×64, buckets channels into 5-bit cells, picks the most
+// populated cell among opaque pixels and returns its averaged colour.
+export async function extractDominantColor(dataUrl: string): Promise<string> {
+  const img = await loadImage(dataUrl);
+  const cnv = document.createElement('canvas');
+  cnv.width = 64;
+  cnv.height = 64;
+  const ctx = cnv.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return '#888888';
+  ctx.drawImage(img, 0, 0, 64, 64);
+  const data = ctx.getImageData(0, 0, 64, 64).data;
+
+  const buckets = new Map<string, { r: number; g: number; b: number; n: number }>();
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] < 32) continue;
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    // Skip near-white & near-black to avoid background / shadow contamination
+    const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+    if (lum > 240 || lum < 18) continue;
+    const key = `${Math.floor(r / 8)},${Math.floor(g / 8)},${Math.floor(b / 8)}`;
+    const cur = buckets.get(key);
+    if (cur) {
+      cur.r += r;
+      cur.g += g;
+      cur.b += b;
+      cur.n++;
+    } else {
+      buckets.set(key, { r, g, b, n: 1 });
+    }
+  }
+  if (buckets.size === 0) return '#888888';
+  let best = { r: 0, g: 0, b: 0, n: 0 };
+  for (const v of buckets.values()) {
+    if (v.n > best.n) best = v;
+  }
+  const r = Math.round(best.r / best.n);
+  const g = Math.round(best.g / best.n);
+  const b = Math.round(best.b / best.n);
+  return '#' + [r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('');
+}
+
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
