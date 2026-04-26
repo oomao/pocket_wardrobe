@@ -15,6 +15,7 @@ import {
   ANCHORS_USED_BY_CATEGORY,
   ClothingAnchors,
   DEFAULT_OCCASIONS,
+  DEFAULT_STYLES,
   Season,
   SEASONS,
   defaultAnchorsForCategory,
@@ -180,6 +181,7 @@ export default function AddClothingPage() {
   const [brand, setBrand] = useState('');
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [occasions, setOccasions] = useState<string[]>([]);
+  const [styles, setStyles] = useState<string[]>([]);
   const [price, setPrice] = useState('');
   const [purchaseDate, setPurchaseDate] = useState('');
   const [notes, setNotes] = useState('');
@@ -308,6 +310,8 @@ export default function AddClothingPage() {
     setSeasons((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
   const toggleOccasion = (o: string) =>
     setOccasions((prev) => (prev.includes(o) ? prev.filter((x) => x !== o) : [...prev, o]));
+  const toggleStyle = (s: string) =>
+    setStyles((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
 
   const handleSave = async () => {
     if (!editedDataUrl) return;
@@ -322,6 +326,7 @@ export default function AddClothingPage() {
       brand: brand.trim() || undefined,
       seasons: seasons.length ? seasons : undefined,
       occasions: occasions.length ? occasions : undefined,
+      styles: styles.length ? styles : undefined,
       price: price ? Number(price) : undefined,
       purchaseDate: purchaseDate ? new Date(purchaseDate).getTime() : undefined,
       notes: notes.trim() || undefined,
@@ -598,6 +603,26 @@ export default function AddClothingPage() {
                     }`}
                   >
                     {o}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Styles */}
+            <div>
+              <p className="text-sm text-walnut-700 mb-1.5">風格</p>
+              <div className="flex flex-wrap gap-2">
+                {DEFAULT_STYLES.map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => toggleStyle(s)}
+                    className={`px-3 py-1 rounded-full text-sm border ${
+                      styles.includes(s)
+                        ? 'bg-walnut-700 text-cream-50 border-walnut-700'
+                        : 'bg-white text-walnut-700 border-cream-200'
+                    }`}
+                  >
+                    {s}
                   </button>
                 ))}
               </div>

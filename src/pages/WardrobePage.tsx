@@ -4,13 +4,22 @@ import { useWardrobe } from '../context/WardrobeContext';
 import {
   Clothing,
   DEFAULT_OCCASIONS,
+  DEFAULT_STYLES,
   Season,
   SEASONS,
   costPerWear,
 } from '../types';
 import { deleteClothing, getAllClothing } from '../services/storage';
-import CategoryTabs from '../components/CategoryTabs';
 import ClothingGrid from '../components/ClothingGrid';
+
+const CATEGORY_ICONS: Record<string, string> = {
+  上衣: '👕',
+  外套: '🧥',
+  下著: '👖',
+  連身: '👗',
+  鞋子: '👟',
+  配件: '👜',
+};
 
 export default function WardrobePage() {
   const { categories } = useWardrobe();
@@ -21,6 +30,7 @@ export default function WardrobePage() {
 
   const [seasonFilter, setSeasonFilter] = useState<Season[]>([]);
   const [occasionFilter, setOccasionFilter] = useState<string[]>([]);
+  const [styleFilter, setStyleFilter] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
 
   const reload = async () => {
@@ -32,14 +42,22 @@ export default function WardrobePage() {
     reload();
   }, []);
 
+  // Item count per category for the drawer cards
+  const counts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const c of items) m.set(c.category, (m.get(c.category) ?? 0) + 1);
+    return m;
+  }, [items]);
+
   const filtered = useMemo(() => {
     return items.filter((c) => {
       if (active !== '全部' && c.category !== active) return false;
       if (seasonFilter.length && !c.seasons?.some((s) => seasonFilter.includes(s))) return false;
       if (occasionFilter.length && !c.occasions?.some((o) => occasionFilter.includes(o))) return false;
+      if (styleFilter.length && !c.styles?.some((s) => styleFilter.includes(s))) return false;
       return true;
     });
-  }, [items, active, seasonFilter, occasionFilter]);
+  }, [items, active, seasonFilter, occasionFilter, styleFilter]);
 
   const handleDelete = async (c: Clothing) => {
     if (!confirm(`確定刪除「${c.name || '未命名'}」?`)) return;
@@ -52,9 +70,12 @@ export default function WardrobePage() {
     setSeasonFilter((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
   const toggleOccasion = (o: string) =>
     setOccasionFilter((prev) => (prev.includes(o) ? prev.filter((x) => x !== o) : [...prev, o]));
+  const toggleStyle = (s: string) =>
+    setStyleFilter((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
   const clearFilters = () => {
     setSeasonFilter([]);
     setOccasionFilter([]);
+    setStyleFilter([]);
   };
 
   // First-time welcoming state
@@ -90,7 +111,7 @@ export default function WardrobePage() {
     );
   }
 
-  const hasFilters = seasonFilter.length > 0 || occasionFilter.length > 0;
+  const hasFilters = seasonFilter.length + occasionFilter.length + styleFilter.length > 0;
 
   return (
     <div>
@@ -98,7 +119,7 @@ export default function WardrobePage() {
         <div>
           <h2 className="text-3xl font-bold text-walnut-700">衣櫥</h2>
           <p className="text-sm text-walnut-500/70 mt-1">
-            {items.length} 件衣物 · {categories.length} 個分類 · 顯示 {filtered.length} 件
+            {items.length} 件衣物 · 顯示 {filtered.length} 件
           </p>
         </div>
         <div className="flex gap-2">
@@ -110,7 +131,7 @@ export default function WardrobePage() {
                 : 'bg-white text-walnut-700 border-cream-200'
             }`}
           >
-            🔍 篩選{hasFilters ? `（${seasonFilter.length + occasionFilter.length}）` : ''}
+            🔍 篩選{hasFilters ? `（${seasonFilter.length + occasionFilter.length + styleFilter.length}）` : ''}
           </button>
           <Link to="/add" className="bg-walnut-700 hover:bg-walnut-800 text-cream-50 px-4 py-2 rounded-xl text-sm shadow-sm">
             ➕ 新增衣物
@@ -118,46 +139,54 @@ export default function WardrobePage() {
         </div>
       </div>
 
-      <CategoryTabs categories={categories} active={active} onChange={setActive} />
+      {/* Visual category shelves */}
+      <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 gap-2.5 mb-5">
+        <button
+          onClick={() => setActive('全部')}
+          className={`wood-shelf p-3 text-center transition-transform hover:-translate-y-0.5 ${active === '全部' ? 'active' : ''}`}
+          aria-label="全部"
+        >
+          <div className="text-2xl mb-0.5">🧺</div>
+          <div className="text-xs font-semibold">全部</div>
+          <div className="text-[10px] opacity-70">{items.length} 件</div>
+        </button>
+        {categories.map((cat) => {
+          const n = counts.get(cat) ?? 0;
+          return (
+            <button
+              key={cat}
+              onClick={() => setActive(cat)}
+              className={`wood-shelf p-3 text-center transition-transform hover:-translate-y-0.5 ${active === cat ? 'active' : ''}`}
+              aria-label={cat}
+            >
+              <div className="text-2xl mb-0.5">{CATEGORY_ICONS[cat] ?? '👚'}</div>
+              <div className="text-xs font-semibold">{cat}</div>
+              <div className="text-[10px] opacity-70">{n} 件</div>
+            </button>
+          );
+        })}
+      </div>
 
       {showFilters && (
         <div className="wood-card p-4 mb-4 space-y-3">
-          <div>
-            <p className="text-xs text-walnut-700 mb-1.5">季節</p>
-            <div className="flex flex-wrap gap-2">
-              {SEASONS.map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => toggleSeason(s.id)}
-                  className={`px-3 py-1 rounded-full text-sm border ${
-                    seasonFilter.includes(s.id)
-                      ? 'bg-walnut-700 text-cream-50 border-walnut-700'
-                      : 'bg-white text-walnut-700 border-cream-200'
-                  }`}
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <p className="text-xs text-walnut-700 mb-1.5">場合</p>
-            <div className="flex flex-wrap gap-2">
-              {DEFAULT_OCCASIONS.map((o) => (
-                <button
-                  key={o}
-                  onClick={() => toggleOccasion(o)}
-                  className={`px-3 py-1 rounded-full text-sm border ${
-                    occasionFilter.includes(o)
-                      ? 'bg-walnut-700 text-cream-50 border-walnut-700'
-                      : 'bg-white text-walnut-700 border-cream-200'
-                  }`}
-                >
-                  {o}
-                </button>
-              ))}
-            </div>
-          </div>
+          <ChipGroup
+            label="季節"
+            options={SEASONS.map((s) => ({ id: s.id, label: s.label }))}
+            selected={seasonFilter}
+            onToggle={(id) => toggleSeason(id as Season)}
+          />
+          <ChipGroup
+            label="場合"
+            options={DEFAULT_OCCASIONS.map((o) => ({ id: o, label: o }))}
+            selected={occasionFilter}
+            onToggle={toggleOccasion}
+          />
+          <ChipGroup
+            label="風格"
+            options={DEFAULT_STYLES.map((s) => ({ id: s, label: s }))}
+            selected={styleFilter}
+            onToggle={toggleStyle}
+          />
           {hasFilters && (
             <button onClick={clearFilters} className="text-xs text-stone-500 underline">
               清除所有篩選
@@ -169,6 +198,39 @@ export default function WardrobePage() {
       <ClothingGrid items={filtered} onClick={setDetail} onDelete={handleDelete} />
 
       {detail && <DetailModal item={detail} onClose={() => setDetail(null)} onDelete={() => handleDelete(detail)} />}
+    </div>
+  );
+}
+
+function ChipGroup<T extends string>({
+  label,
+  options,
+  selected,
+  onToggle,
+}: {
+  label: string;
+  options: Array<{ id: T; label: string }>;
+  selected: T[];
+  onToggle: (id: T) => void;
+}) {
+  return (
+    <div>
+      <p className="text-xs text-walnut-700 mb-1.5">{label}</p>
+      <div className="flex flex-wrap gap-2">
+        {options.map((o) => (
+          <button
+            key={o.id}
+            onClick={() => onToggle(o.id)}
+            className={`px-3 py-1 rounded-full text-sm border ${
+              selected.includes(o.id)
+                ? 'bg-walnut-700 text-cream-50 border-walnut-700'
+                : 'bg-white text-walnut-700 border-cream-200'
+            }`}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -216,6 +278,12 @@ function DetailModal({
             <div>
               <dt className="text-xs text-stone-400">場合</dt>
               <dd className="text-walnut-700">{item.occasions!.join(' · ')}</dd>
+            </div>
+          )}
+          {(item.styles?.length ?? 0) > 0 && (
+            <div>
+              <dt className="text-xs text-stone-400">風格</dt>
+              <dd className="text-walnut-700">{item.styles!.join(' · ')}</dd>
             </div>
           )}
           {item.price !== undefined && (

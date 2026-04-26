@@ -48,6 +48,38 @@ h1, h2, h3 {
 }
 .wood-sidebar a, .wood-sidebar h1 { color: #f8f1de; }
 
+/* ─── Wood-grain shelf compartments (wardrobe drawers) ─────────────── */
+.wood-shelf {
+  background:
+    /* horizontal subtle wood grain */
+    repeating-linear-gradient(
+      88deg,
+      rgba(108, 75, 36, 0.06) 0px,
+      rgba(108, 75, 36, 0.06) 1px,
+      transparent 1px,
+      transparent 9px
+    ),
+    repeating-linear-gradient(
+      88deg,
+      rgba(255, 255, 255, 0.04) 0px,
+      rgba(255, 255, 255, 0.04) 2px,
+      transparent 2px,
+      transparent 32px
+    ),
+    linear-gradient(170deg, #f5e8c8 0%, #ecd9aa 50%, #d8be81 100%);
+  border: 1px solid #c8a868;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.6) inset,
+    0 -1px 0 rgba(108, 75, 36, 0.18) inset,
+    0 6px 14px -8px rgba(85, 56, 25, 0.25);
+  border-radius: 14px;
+  color: #5b3a1f;
+}
+.wood-shelf.active {
+  outline: 2px solid #8b5a2b;
+  outline-offset: 2px;
+}
+
 /* ─── Surfaces ──────────────────────────────────────────────────────── */
 .wood-card {
   background: #ffffff;

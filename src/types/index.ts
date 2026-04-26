@@ -31,6 +31,10 @@ export const SEASONS: { id: Season; label: string }[] = [
 
 export const DEFAULT_OCCASIONS = ['日常', '上班', '運動', '約會', '正式', '居家'];
 
+// Style / aesthetic tags borrowed from popular wardrobe apps. Orthogonal to
+// 場合 (occasion) — a 簡約 piece can still go to 上班 OR 約會.
+export const DEFAULT_STYLES = ['簡約', '運動', '中性', '韓系', '日系', '歐美', '復古', '藝術'];
+
 export interface Clothing {
   id: string;
   name: string;
@@ -43,6 +47,7 @@ export interface Clothing {
   brand?: string;
   seasons?: Season[];
   occasions?: string[];
+  styles?: string[];         // aesthetic tags (簡約 / 韓系 / 復古…)
   price?: number;            // currency-agnostic; UI shows NTD
   purchaseDate?: number;     // ms timestamp
   notes?: string;
