@@ -21,19 +21,29 @@ export interface RunOptions extends AITryOnConfig {
   onStatus?: (stage: ProgressStage, message: string) => void;
 }
 
+// Default Space — Qwen-Image-Edit purpose-built try-on space.
+// Qwen-Image-2.0 (Alibaba, 2026) outperformed Gemini-2.5-Flash-Image-Preview
+// in blind tests and matched Gemini-3-Pro-Image-Preview on edit tasks.
 export const DEFAULT_CONFIG: AITryOnConfig = {
-  spaceId: 'Kwai-Kolors/Kolors-Virtual-Try-On',
-  endpoint: '/tryon',
+  spaceId: 'JamesDigitalOcean/Qwen_Image_Edit_Try_On_Clothes',
+  endpoint: '/predict',
 };
 
 // Fallback chain — if the user's chosen Space can't be resolved (sleeping
-// / removed / CORS blocked), we try these in order. All are public
-// virtual-try-on Spaces that are usually awake.
+// / removed / CORS blocked) we walk through these. Ordered by quality:
+//   1. Qwen try-on (purpose-built fine-tune of Qwen-Image-Edit)
+//   2. Qwen-Image-Edit-2511 (general edit, can do try-on via prompt)
+//   3. FLUX.1 Kontext-Dev (general edit)
+//   4. Kolors-VTON (try-on specialist)
+//   5–7. CatVTON / IDM-VTON / OOTDiffusion (older but reliable)
 export const FALLBACK_SPACES: Array<{ spaceId: string; endpoint: string }> = [
-  { spaceId: 'Kwai-Kolors/Kolors-Virtual-Try-On', endpoint: '/tryon' },
-  { spaceId: 'levihsu/OOTDiffusion',              endpoint: '/predict' },
-  { spaceId: 'zhengchong/CatVTON',                endpoint: '/process' },
-  { spaceId: 'yisol/IDM-VTON',                    endpoint: '/predict' },
+  { spaceId: 'JamesDigitalOcean/Qwen_Image_Edit_Try_On_Clothes', endpoint: '/predict' },
+  { spaceId: 'Qwen/Qwen-Image-Edit-2511',                        endpoint: '/predict' },
+  { spaceId: 'black-forest-labs/FLUX.1-Kontext-Dev',             endpoint: '/predict' },
+  { spaceId: 'Kwai-Kolors/Kolors-Virtual-Try-On',                endpoint: '/tryon' },
+  { spaceId: 'zhengchong/CatVTON',                               endpoint: '/process' },
+  { spaceId: 'yisol/IDM-VTON',                                   endpoint: '/predict' },
+  { spaceId: 'levihsu/OOTDiffusion',                             endpoint: '/predict' },
 ];
 
 // Map our wardrobe categories to the cloth-type taxonomy commonly used by
