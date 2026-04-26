@@ -112,6 +112,21 @@ export interface CategoryBox {
 
 // Where a piece of clothing of each category should land on the mannequin.
 // Coordinates use the SVG viewBox; controller converts to canvas pixels at runtime.
+// Two-point body landmarks on the default mannequin SVG (viewBox 200×500).
+// Used when there is no MediaPipe pose detection (i.e. default avatar mode)
+// so smart-fit affine still works.
+export const MANNEQUIN_LANDMARKS: Record<string, { left: { x: number; y: number }; right: { x: number; y: number } }> = {
+  shoulders: { left: { x: 54, y: 112 }, right: { x: 146, y: 112 } },
+  hips:      { left: { x: 64, y: 318 }, right: { x: 136, y: 318 } },
+  ankles:    { left: { x: 80, y: 422 }, right: { x: 120, y: 422 } },
+};
+
+export function landmarksForCategory(category: string) {
+  if (category === '下著') return MANNEQUIN_LANDMARKS.hips;
+  if (category === '鞋子') return MANNEQUIN_LANDMARKS.ankles;
+  return MANNEQUIN_LANDMARKS.shoulders;
+}
+
 // Coordinates target the new mannequin SVG (legs end ~432, pedestal below).
 export const CATEGORY_PLACEMENT: Record<string, CategoryBox> = {
   上衣: { topY: 102, bottomY: 260, leftX: 28, rightX: 172 },

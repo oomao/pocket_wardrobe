@@ -1,13 +1,17 @@
 import * as fabric from 'fabric';
 import {
+  ANCHORS_USED_BY_CATEGORY,
   CATEGORY_BODY_LANDMARKS,
   CATEGORY_PLACEMENT,
   CategoryBox,
   Clothing,
+  ClothingAnchors,
   DEFAULT_PLACEMENT,
   MANNEQUIN_VIEWBOX,
   OutfitItem,
   UserProfile,
+  defaultAnchorsForCategory,
+  landmarksForCategory,
   profileToScales,
 } from '../types';
 import type { NormalizedLandmark } from './poseDetection';
@@ -138,21 +142,46 @@ export class TryOnController {
     };
   }
 
-  // Compute affine fit (scale + rotation + translation) from clothing's two
-  // anchor points to the body's two landmarks. Returns Fabric setters or null
-  // if landmarks/anchors aren't available.
+  // Resolve the two body landmark canvas positions (left, right) for a
+  // clothing category. In photo mode it pulls from MediaPipe; in default
+  // mode it uses the static mannequin landmark table. Returns null when the
+  // category opts out of anchored placement (e.g. 配件).
+  private getBodyLandmarkPair(category: string): { left: { x: number; y: number }; right: { x: number; y: number } } | null {
+    if (!ANCHORS_USED_BY_CATEGORY[category]) return null;
+    if (this.avatarTx?.isPhoto && this.bodyLandmarks) {
+      const map = CATEGORY_BODY_LANDMARKS[category];
+      if (!map) return null;
+      const l = this.landmarkToCanvas(map.left);
+      const r = this.landmarkToCanvas(map.right);
+      if (!l || !r) return null;
+      return { left: l, right: r };
+    }
+    if (this.avatarTx && !this.avatarTx.isPhoto) {
+      const lm = landmarksForCategory(category);
+      return {
+        left: this.viewToCanvas(lm.left.x, lm.left.y),
+        right: this.viewToCanvas(lm.right.x, lm.right.y),
+      };
+    }
+    return null;
+  }
+
+  // Compute affine fit (scale + rotation + translation) that maps the
+  // garment's two anchor points onto the matching body landmarks.
+  // Falls back to category default anchors if the clothing record lacks them
+  // (e.g. items uploaded before the anchor flow shipped).
   private computeBodyFit(clothing: Clothing, img: fabric.FabricImage) {
-    if (!clothing.anchors) return null;
-    const bodyMap = CATEGORY_BODY_LANDMARKS[clothing.category];
-    if (!bodyMap) return null;
-    const bodyL = this.landmarkToCanvas(bodyMap.left);
-    const bodyR = this.landmarkToCanvas(bodyMap.right);
-    if (!bodyL || !bodyR) return null;
+    const target = this.getBodyLandmarkPair(clothing.category);
+    if (!target) return null;
+    const bodyL = target.left;
+    const bodyR = target.right;
+    const anchors: ClothingAnchors =
+      clothing.anchors ?? defaultAnchorsForCategory(clothing.category);
 
     const cW = img.width ?? 1;
     const cH = img.height ?? 1;
-    const cAL = { x: clothing.anchors.left.x * cW, y: clothing.anchors.left.y * cH };
-    const cAR = { x: clothing.anchors.right.x * cW, y: clothing.anchors.right.y * cH };
+    const cAL = { x: anchors.left.x * cW, y: anchors.left.y * cH };
+    const cAR = { x: anchors.right.x * cW, y: anchors.right.y * cH };
 
     const dxC = cAR.x - cAL.x;
     const dyC = cAR.y - cAL.y;
@@ -205,11 +234,8 @@ export class TryOnController {
     const restoring = opts?.scaleX !== undefined;
 
     if (!restoring) {
-      // 1) Try body-fit if avatar is a photo with detected landmarks
-      const fit =
-        this.avatarTx?.isPhoto && this.bodyLandmarks
-          ? this.computeBodyFit(clothing, img)
-          : null;
+      // 1) Try body-fit (works on both photo+pose and default mannequin)
+      const fit = this.computeBodyFit(clothing, img);
       if (fit) {
         left = fit.left;
         top = fit.top;
