@@ -9,6 +9,7 @@ import {
   saveOutfit,
 } from '../services/storage';
 import { TryOnController } from '../services/canvasController';
+import { detectPose } from '../services/poseDetection';
 import CategoryTabs from '../components/CategoryTabs';
 
 const ASPECT = 3 / 4;
@@ -28,6 +29,7 @@ export default function TryOnPage() {
   const [hasSelection, setHasSelection] = useState(false);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [poseStatus, setPoseStatus] = useState<'idle' | 'detecting' | 'ready' | 'failed'>('idle');
 
   useLayoutEffect(() => {
     if (!wrapperRef.current) return;
@@ -68,6 +70,22 @@ export default function TryOnPage() {
       await ctrl.setAvatar(profile, url);
       const all = await getAllClothing();
       setClothes(all);
+
+      // Detect body landmarks if avatar is a user photo
+      if (profile.avatarMode === 'photo' && profile.photoBase64) {
+        setPoseStatus('detecting');
+        try {
+          const lm = await detectPose(profile.photoBase64);
+          ctrl.setBodyLandmarks(lm);
+          setPoseStatus(lm ? 'ready' : 'failed');
+        } catch (err) {
+          console.error('pose detect failed', err);
+          setPoseStatus('failed');
+        }
+      } else {
+        setPoseStatus('idle');
+      }
+
       if (outfitId) {
         const outfit = await getOutfitById(outfitId);
         if (outfit) await ctrl.restoreState(outfit.items, getClothingById);
@@ -107,7 +125,18 @@ export default function TryOnPage() {
     <div className="lg:grid lg:grid-cols-[1fr_320px] lg:gap-4">
       <div>
         <div className="flex justify-between items-center mb-3">
-          <h2 className="text-2xl font-bold">試穿室</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-2xl font-bold">試穿室</h2>
+            {poseStatus === 'detecting' && (
+              <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded">🤖 偵測身體中…</span>
+            )}
+            {poseStatus === 'ready' && (
+              <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded">✓ 智慧對齊已啟用</span>
+            )}
+            {poseStatus === 'failed' && (
+              <span className="text-xs bg-rose-100 text-rose-700 px-2 py-0.5 rounded" title="自動對齊失敗，已改用基本定位。請確認照片為全身正面。">⚠ 對齊失敗</span>
+            )}
+          </div>
           <button
             onClick={() => setDrawerOpen(true)}
             className="lg:hidden bg-brand-500 text-white px-3 py-1.5 rounded text-sm"

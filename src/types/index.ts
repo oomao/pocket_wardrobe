@@ -9,13 +9,57 @@ export interface UserProfile {
   photoBase64?: string;
 }
 
+// Two-point anchors used to align a garment to body landmarks during try-on.
+// Coordinates are normalized 0..1 of the garment image dimensions.
+// - 上衣/外套/連身: leftAnchor = left shoulder seam, rightAnchor = right shoulder seam
+// - 下著:            leftAnchor = left waist,        rightAnchor = right waist
+// - 鞋子:            leftAnchor = left shoe top,     rightAnchor = right shoe top
+// - 配件:            (anchors not used; clothing centered manually)
+export interface ClothingAnchors {
+  left: { x: number; y: number };
+  right: { x: number; y: number };
+}
+
 export interface Clothing {
   id: string;
   name: string;
   imageBase64: string;
   category: string;
   createdAt: number;
+  anchors?: ClothingAnchors;
 }
+
+// Default normalized anchor positions, used to seed AnchorPicker before the
+// user drags. Tuned per category: shoulders sit higher and wider on tops.
+export function defaultAnchorsForCategory(category: string): ClothingAnchors {
+  if (category === '下著') {
+    return { left: { x: 0.18, y: 0.08 }, right: { x: 0.82, y: 0.08 } };
+  }
+  if (category === '鞋子') {
+    return { left: { x: 0.30, y: 0.20 }, right: { x: 0.70, y: 0.20 } };
+  }
+  // 上衣 / 外套 / 連身
+  return { left: { x: 0.18, y: 0.18 }, right: { x: 0.82, y: 0.18 } };
+}
+
+export const ANCHORS_USED_BY_CATEGORY: Record<string, boolean> = {
+  上衣: true,
+  外套: true,
+  連身: true,
+  下著: true,
+  鞋子: true,
+  配件: false,
+};
+
+// Map category -> body landmarks (MediaPipe Pose indices) the anchors map onto.
+export const CATEGORY_BODY_LANDMARKS: Record<string, { left: number; right: number } | null> = {
+  上衣: { left: 11, right: 12 }, // shoulders
+  外套: { left: 11, right: 12 },
+  連身: { left: 11, right: 12 },
+  下著: { left: 23, right: 24 }, // hips
+  鞋子: { left: 27, right: 28 }, // ankles
+  配件: null,
+};
 
 export interface OutfitItem {
   clotheId: string;

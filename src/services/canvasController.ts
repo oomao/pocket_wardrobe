@@ -1,5 +1,6 @@
 import * as fabric from 'fabric';
 import {
+  CATEGORY_BODY_LANDMARKS,
   CATEGORY_PLACEMENT,
   CategoryBox,
   Clothing,
@@ -9,6 +10,7 @@ import {
   UserProfile,
   profileToScales,
 } from '../types';
+import type { NormalizedLandmark } from './poseDetection';
 
 interface AvatarTransform {
   left: number;
@@ -17,7 +19,6 @@ interface AvatarTransform {
   scaleY: number;
   viewW: number;
   viewH: number;
-  // when true, photo mode → no SVG landmarks; auto-placement uses heuristic ratios
   isPhoto: boolean;
 }
 
@@ -25,6 +26,7 @@ export class TryOnController {
   canvas: fabric.Canvas;
   private avatarImg: fabric.FabricImage | null = null;
   private avatarTx: AvatarTransform | null = null;
+  private bodyLandmarks: NormalizedLandmark[] | null = null;
 
   constructor(el: HTMLCanvasElement, width: number, height: number) {
     this.canvas = new fabric.Canvas(el, {
@@ -38,6 +40,10 @@ export class TryOnController {
 
   dispose() {
     this.canvas.dispose();
+  }
+
+  setBodyLandmarks(lm: NormalizedLandmark[] | null) {
+    this.bodyLandmarks = lm;
   }
 
   async setAvatar(profile: UserProfile, defaultUrl: string) {
@@ -58,10 +64,8 @@ export class TryOnController {
     let scaleX: number;
     let scaleY: number;
     if (useUserPhoto) {
-      // Fit photo into canvas keeping aspect ratio (no body-scaling)
       const fit = Math.min(cw / naturalW, ch / naturalH) * 0.95;
-      scaleX = fit;
-      scaleY = fit;
+      scaleX = scaleY = fit;
     } else {
       const baseScale = (ch * 0.95) / naturalH;
       const s = profileToScales(profile);
@@ -95,7 +99,7 @@ export class TryOnController {
     this.canvas.requestRenderAll();
   }
 
-  // Convert mannequin viewBox coords → canvas pixels.
+  // Convert mannequin viewBox / photo native coords → canvas pixels.
   private viewToCanvas(vx: number, vy: number) {
     if (!this.avatarTx) return { x: vx, y: vy };
     const { left, top, scaleX, scaleY, viewW, viewH } = this.avatarTx;
@@ -105,9 +109,14 @@ export class TryOnController {
     };
   }
 
-  // Resolve placement box for a category. For photo mode we use ratio-based
-  // heuristics (e.g. shoulders ≈ 18% from top, hips ≈ 55%) because there are
-  // no real landmarks until pose detection is added.
+  // Convert MediaPipe normalized landmark (0..1) to canvas pixels.
+  private landmarkToCanvas(idx: number) {
+    if (!this.avatarTx || !this.bodyLandmarks) return null;
+    const lm = this.bodyLandmarks[idx];
+    if (!lm) return null;
+    return this.viewToCanvas(lm.x * this.avatarTx.viewW, lm.y * this.avatarTx.viewH);
+  }
+
   private resolvePlacementBox(category: string): CategoryBox {
     const fromMap = CATEGORY_PLACEMENT[category] ?? DEFAULT_PLACEMENT;
     if (!this.avatarTx?.isPhoto) return fromMap;
@@ -129,6 +138,59 @@ export class TryOnController {
     };
   }
 
+  // Compute affine fit (scale + rotation + translation) from clothing's two
+  // anchor points to the body's two landmarks. Returns Fabric setters or null
+  // if landmarks/anchors aren't available.
+  private computeBodyFit(clothing: Clothing, img: fabric.FabricImage) {
+    if (!clothing.anchors) return null;
+    const bodyMap = CATEGORY_BODY_LANDMARKS[clothing.category];
+    if (!bodyMap) return null;
+    const bodyL = this.landmarkToCanvas(bodyMap.left);
+    const bodyR = this.landmarkToCanvas(bodyMap.right);
+    if (!bodyL || !bodyR) return null;
+
+    const cW = img.width ?? 1;
+    const cH = img.height ?? 1;
+    const cAL = { x: clothing.anchors.left.x * cW, y: clothing.anchors.left.y * cH };
+    const cAR = { x: clothing.anchors.right.x * cW, y: clothing.anchors.right.y * cH };
+
+    const dxC = cAR.x - cAL.x;
+    const dyC = cAR.y - cAL.y;
+    const dC = Math.hypot(dxC, dyC);
+    if (dC < 1) return null;
+    const angleC = Math.atan2(dyC, dxC);
+
+    const dxB = bodyR.x - bodyL.x;
+    const dyB = bodyR.y - bodyL.y;
+    const dB = Math.hypot(dxB, dyB);
+    const angleB = Math.atan2(dyB, dxB);
+
+    const scale = dB / dC;
+    const rad = angleB - angleC;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+
+    // Offset from clothing image center to its mid-anchor (in clothing pixels)
+    const midClothX = (cAL.x + cAR.x) / 2 - cW / 2;
+    const midClothY = (cAL.y + cAR.y) / 2 - cH / 2;
+
+    // After scale + rotation, where the mid-anchor lands relative to the
+    // image center.
+    const offsetX = (midClothX * cos - midClothY * sin) * scale;
+    const offsetY = (midClothX * sin + midClothY * cos) * scale;
+
+    const midBX = (bodyL.x + bodyR.x) / 2;
+    const midBY = (bodyL.y + bodyR.y) / 2;
+
+    return {
+      left: midBX - offsetX,
+      top: midBY - offsetY,
+      scaleX: scale,
+      scaleY: scale,
+      angle: (rad * 180) / Math.PI,
+    };
+  }
+
   async addClothing(clothing: Clothing, opts?: Partial<OutfitItem>) {
     const img = await fabric.FabricImage.fromURL(clothing.imageBase64);
     const cw = this.canvas.getWidth();
@@ -138,25 +200,40 @@ export class TryOnController {
     let top = opts?.y ?? ch / 2;
     let scaleX = opts?.scaleX;
     let scaleY = opts?.scaleY;
+    let angle = opts?.angle ?? 0;
 
-    if (opts?.scaleX === undefined && this.avatarTx) {
-      // First-time placement: snap to category landmark on the body.
-      const box = this.resolvePlacementBox(clothing.category);
-      const tl = this.viewToCanvas(box.leftX, box.topY);
-      const br = this.viewToCanvas(box.rightX, box.bottomY);
-      const targetW = Math.max(40, br.x - tl.x);
-      const targetH = Math.max(40, br.y - tl.y);
-      const naturalW = img.width ?? 1;
-      const naturalH = img.height ?? 1;
-      const fit = Math.min(targetW / naturalW, targetH / naturalH);
-      scaleX = fit;
-      scaleY = fit;
-      left = (tl.x + br.x) / 2;
-      top = (tl.y + br.y) / 2;
-    } else if (scaleX === undefined) {
-      const targetMax = Math.min(cw, ch) * 0.4;
-      const naturalMax = Math.max(img.width ?? 1, img.height ?? 1);
-      scaleX = scaleY = targetMax / naturalMax;
+    const restoring = opts?.scaleX !== undefined;
+
+    if (!restoring) {
+      // 1) Try body-fit if avatar is a photo with detected landmarks
+      const fit =
+        this.avatarTx?.isPhoto && this.bodyLandmarks
+          ? this.computeBodyFit(clothing, img)
+          : null;
+      if (fit) {
+        left = fit.left;
+        top = fit.top;
+        scaleX = fit.scaleX;
+        scaleY = fit.scaleY;
+        angle = fit.angle;
+      } else if (this.avatarTx) {
+        // 2) Fall back to category placement box
+        const box = this.resolvePlacementBox(clothing.category);
+        const tl = this.viewToCanvas(box.leftX, box.topY);
+        const br = this.viewToCanvas(box.rightX, box.bottomY);
+        const targetW = Math.max(40, br.x - tl.x);
+        const targetH = Math.max(40, br.y - tl.y);
+        const naturalW = img.width ?? 1;
+        const naturalH = img.height ?? 1;
+        const f = Math.min(targetW / naturalW, targetH / naturalH);
+        scaleX = scaleY = f;
+        left = (tl.x + br.x) / 2;
+        top = (tl.y + br.y) / 2;
+      } else {
+        const targetMax = Math.min(cw, ch) * 0.4;
+        const naturalMax = Math.max(img.width ?? 1, img.height ?? 1);
+        scaleX = scaleY = targetMax / naturalMax;
+      }
     }
 
     img.set({
@@ -166,7 +243,7 @@ export class TryOnController {
       top,
       scaleX: scaleX!,
       scaleY: scaleY ?? scaleX!,
-      angle: opts?.angle ?? 0,
+      angle,
       cornerStyle: 'circle',
       cornerColor: '#a21caf',
       borderColor: '#a21caf',
