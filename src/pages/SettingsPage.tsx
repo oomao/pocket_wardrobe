@@ -76,12 +76,17 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-8 max-w-3xl">
+      <div className="mb-2">
+        <h2 className="text-3xl font-bold text-walnut-700">設定</h2>
+        <p className="text-sm text-walnut-500/70 mt-1">分類、虛擬人物、個人照片管理。</p>
+      </div>
+
       <section>
-        <h2 className="text-2xl font-bold mb-4">分類管理</h2>
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <h3 className="text-lg font-semibold text-walnut-700 mb-3">📁 分類管理</h3>
+        <div className="wood-card p-5">
           <div className="flex flex-wrap gap-2 mb-4">
             {categories.map((c) => (
-              <span key={c} className="inline-flex items-center gap-1 bg-brand-50 text-brand-700 px-3 py-1 rounded-full text-sm">
+              <span key={c} className="inline-flex items-center gap-1 bg-cream-100 text-walnut-700 px-3 py-1 rounded-full text-sm">
                 {c}
                 <button onClick={() => removeCategory(c)} className="text-red-500 hover:text-red-700" aria-label={`刪除 ${c}`}>×</button>
               </span>
@@ -95,7 +100,7 @@ export default function SettingsPage() {
               className="flex-1 border border-gray-300 rounded px-3 py-1.5 text-sm"
               onKeyDown={(e) => e.key === 'Enter' && addCategory()}
             />
-            <button onClick={addCategory} className="bg-brand-500 text-white px-4 py-1.5 rounded text-sm">
+            <button onClick={addCategory} className="bg-walnut-700 hover:bg-walnut-800 text-cream-50 px-4 py-1.5 rounded-lg text-sm">
               新增
             </button>
           </div>
@@ -103,8 +108,8 @@ export default function SettingsPage() {
       </section>
 
       <section>
-        <h2 className="text-2xl font-bold mb-4">虛擬人物設定</h2>
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <h3 className="text-lg font-semibold text-walnut-700 mb-3">🧍 虛擬人物 / 個人照片</h3>
+        <div className="wood-card p-5">
           {/* Avatar mode chooser */}
           <div className="mb-5">
             <p className="text-sm font-medium mb-2">底圖樣式</p>
@@ -113,7 +118,7 @@ export default function SettingsPage() {
                 onClick={() => setMode('default')}
                 className={`p-3 rounded border text-sm text-left ${
                   draftProfile.avatarMode === 'default'
-                    ? 'border-brand-500 bg-brand-50 ring-2 ring-brand-500'
+                    ? 'border-brand-500 bg-cream-50 ring-2 ring-brand-500/40'
                     : 'border-gray-300 bg-white'
                 }`}
               >
@@ -127,7 +132,7 @@ export default function SettingsPage() {
                 disabled={!draftProfile.photoBase64}
                 className={`p-3 rounded border text-sm text-left disabled:opacity-50 ${
                   draftProfile.avatarMode === 'photo'
-                    ? 'border-brand-500 bg-brand-50 ring-2 ring-brand-500'
+                    ? 'border-brand-500 bg-cream-50 ring-2 ring-brand-500/40'
                     : 'border-gray-300 bg-white'
                 }`}
               >
@@ -152,7 +157,7 @@ export default function SettingsPage() {
                           onClick={() => setDraftProfile({ ...draftProfile, gender: g })}
                           className={`px-4 py-1.5 rounded border text-sm ${
                             draftProfile.gender === g
-                              ? 'bg-brand-500 text-white border-brand-500'
+                              ? 'bg-walnut-700 text-cream-50 border-walnut-700'
                               : 'bg-white border-gray-300'
                           }`}
                         >
@@ -306,7 +311,7 @@ export default function SettingsPage() {
               <button
                 onClick={saveProfile}
                 disabled={busy}
-                className="bg-brand-500 hover:bg-brand-600 disabled:bg-gray-400 text-white px-4 py-2 rounded text-sm"
+                className="bg-walnut-700 hover:bg-walnut-800 disabled:bg-stone-300 text-cream-50 px-4 py-2 rounded-lg text-sm"
               >
                 {busy ? '儲存中…' : '儲存設定'}
               </button>

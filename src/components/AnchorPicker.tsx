@@ -3,7 +3,8 @@ import { ClothingAnchors } from '../types';
 
 interface Props {
   imageDataUrl: string;
-  initialAnchors: ClothingAnchors;
+  /** Controlled anchor values from the parent. */
+  anchors: ClothingAnchors;
   leftLabel: string;
   rightLabel: string;
   onChange: (next: ClothingAnchors) => void;
@@ -15,43 +16,44 @@ const DOT_SIZE = 22;
 
 export default function AnchorPicker({
   imageDataUrl,
-  initialAnchors,
+  anchors,
   leftLabel,
   rightLabel,
   onChange,
 }: Props) {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
-  const [anchors, setAnchors] = useState<ClothingAnchors>(initialAnchors);
+  // Keep latest props in refs so the global drag handlers don't need to be
+  // recreated on every render (which previously caused a re-subscribe storm
+  // and visual flicker as the parent state propagated back into the picker).
+  const anchorsRef = useRef(anchors);
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    anchorsRef.current = anchors;
+  }, [anchors]);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+
   const [dragging, setDragging] = useState<Side | null>(null);
-
-  useEffect(() => {
-    setAnchors(initialAnchors);
-  }, [initialAnchors]);
-
-  useEffect(() => {
-    onChange(anchors);
-  }, [anchors, onChange]);
-
-  const updateFromPointer = (side: Side, clientX: number, clientY: number) => {
-    if (!wrapperRef.current) return;
-    const rect = wrapperRef.current.getBoundingClientRect();
-    const x = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
-    const y = Math.min(1, Math.max(0, (clientY - rect.top) / rect.height));
-    setAnchors((prev) => ({ ...prev, [side]: { x, y } }));
-  };
 
   useEffect(() => {
     if (!dragging) return;
     const onMove = (e: PointerEvent) => {
       e.preventDefault();
-      updateFromPointer(dragging, e.clientX, e.clientY);
+      const rect = wrapperRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const x = clamp01((e.clientX - rect.left) / rect.width);
+      const y = clamp01((e.clientY - rect.top) / rect.height);
+      onChangeRef.current({ ...anchorsRef.current, [dragging]: { x, y } });
     };
     const onUp = () => setDragging(null);
     window.addEventListener('pointermove', onMove, { passive: false });
     window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
     return () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
     };
   }, [dragging]);
 
@@ -64,7 +66,7 @@ export default function AnchorPicker({
     <div className="space-y-2">
       <div
         ref={wrapperRef}
-        className="relative inline-block max-w-full bg-[conic-gradient(at_50%_50%,#f3f4f6_25%,#fff_0_50%,#f3f4f6_0_75%,#fff_0)] bg-[length:16px_16px] border border-gray-300 rounded select-none"
+        className="relative inline-block max-w-full bg-[conic-gradient(at_50%_50%,#f3f4f6_25%,#fff_0_50%,#f3f4f6_0_75%,#fff_0)] bg-[length:16px_16px] border border-cream-200 rounded-lg select-none"
         style={{ touchAction: 'none' }}
       >
         <img
@@ -73,19 +75,13 @@ export default function AnchorPicker({
           className="block max-w-full max-h-[55vh] pointer-events-none"
           draggable={false}
         />
-        {/* Connecting line */}
-        <svg
-          className="absolute inset-0 pointer-events-none"
-          width="100%"
-          height="100%"
-          preserveAspectRatio="none"
-        >
+        <svg className="absolute inset-0 pointer-events-none" width="100%" height="100%" preserveAspectRatio="none">
           <line
             x1={`${anchors.left.x * 100}%`}
             y1={`${anchors.left.y * 100}%`}
             x2={`${anchors.right.x * 100}%`}
             y2={`${anchors.right.y * 100}%`}
-            stroke="#a21caf"
+            stroke="#8b5a2b"
             strokeWidth="2"
             strokeDasharray="6 4"
           />
@@ -115,7 +111,7 @@ export default function AnchorPicker({
           );
         })}
       </div>
-      <p className="text-xs text-gray-600">
+      <p className="text-xs text-stone-600">
         拖曳 <span className="inline-block w-3 h-3 rounded-full bg-sky-500 align-middle"></span>{' '}
         到 <strong>{leftLabel}</strong>，{' '}
         <span className="inline-block w-3 h-3 rounded-full bg-orange-500 align-middle"></span>{' '}
@@ -123,4 +119,8 @@ export default function AnchorPicker({
       </p>
     </div>
   );
+}
+
+function clamp01(v: number): number {
+  return v < 0 ? 0 : v > 1 ? 1 : v;
 }

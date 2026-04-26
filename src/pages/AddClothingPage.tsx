@@ -185,10 +185,22 @@ export default function AddClothingPage() {
     setErrorMsg(null);
     try {
       const current = ed.exportDataURL();
-      const next =
+      let next =
         kind === 'puter'
           ? await aiCleanupViaPuter(current, (m) => setCleanupMsg(m))
           : await aiCleanupCanvas(current);
+
+      // Puter's AI re-renders with a fresh (usually pure white) background.
+      // Run bg removal + transparent crop again so the editor canvas stays
+      // transparent and the saved garment hugs its bbox.
+      if (kind === 'puter') {
+        setCleanupMsg('AI 完成，重新去背中…');
+        const blob = await fetch(next).then((r) => r.blob());
+        const cleaned = await removeBackground(blob);
+        next = await blobToDataURL(cleaned);
+        next = await cropTransparent(next, 12);
+      }
+
       await ed.replaceImage(next);
       setCanUndo(false);
       setCleanupMsg(kind === 'puter' ? 'AI 還原完成 ✅' : '自動調色完成 ✅');
@@ -233,7 +245,12 @@ export default function AddClothingPage() {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold mb-4">新增衣物</h2>
+      <div className="mb-5">
+        <h2 className="text-3xl font-bold text-walnut-700">新增衣物</h2>
+        <p className="text-sm text-walnut-500/70 mt-1">
+          拍照或選擇照片 → AI 自動去背 → 微調 → 標對齊點 → 儲存
+        </p>
+      </div>
 
       {/* Step indicator */}
       {step !== 'idle' && step !== 'removing' && (
@@ -245,8 +262,10 @@ export default function AddClothingPage() {
           ].map((s) => (
             <li
               key={s.k}
-              className={`px-2 py-1 rounded ${
-                step === s.k ? 'bg-brand-500 text-white' : 'bg-gray-100 text-gray-500'
+              className={`px-3 py-1 rounded-full ${
+                step === s.k
+                  ? 'bg-walnut-700 text-cream-50 shadow-sm'
+                  : 'bg-cream-100 text-stone-500'
               }`}
             >
               {s.label}
@@ -256,7 +275,7 @@ export default function AddClothingPage() {
       )}
 
       {step === 'idle' && (
-        <div className="bg-white p-6 rounded-lg border border-gray-200">
+        <div className="wood-card p-6">
           <p className="text-sm text-gray-600 mb-4">
             請選擇一張衣服照片，系統會自動進行 AI 去背（首次載入需下載模型約 24MB）。
           </p>
@@ -279,7 +298,7 @@ export default function AddClothingPage() {
       )}
 
       {step === 'removing' && (
-        <div className="bg-white p-6 rounded-lg border border-gray-200">
+        <div className="wood-card p-6">
           <p className="font-medium">AI 去背處理中…</p>
           {progress && (
             <p className="text-xs text-gray-500 mt-1">
@@ -298,7 +317,7 @@ export default function AddClothingPage() {
       {/* Step 1: editor */}
       <div className={step === 'editing' ? 'block' : 'hidden'}>
         {/* Cleanup row */}
-        <div className="bg-white p-3 rounded-lg border border-gray-200 mb-3 flex flex-wrap gap-2 items-center">
+        <div className="wood-card p-3 mb-3 flex flex-wrap gap-2 items-center">
           <span className="text-xs text-gray-500 mr-1">還原服飾原色：</span>
           <button
             onClick={() => runCleanup('puter')}
@@ -311,7 +330,7 @@ export default function AddClothingPage() {
           <button
             onClick={() => runCleanup('canvas')}
             disabled={cleanupBusy !== null}
-            className="px-3 py-1.5 rounded bg-white border border-gray-300 hover:border-brand-500 text-xs disabled:opacity-50"
+            className="px-3 py-1.5 rounded bg-white border border-cream-200 hover:border-brand-400 text-xs disabled:opacity-50"
             title="本機自動白平衡 + 對比 / 飽和度微調。瞬間完成，無需註冊。"
           >
             {cleanupBusy === 'canvas' ? '處理中…' : '🎨 自動調色（本機）'}
@@ -319,12 +338,12 @@ export default function AddClothingPage() {
           {cleanupMsg && <span className="text-xs text-emerald-600">{cleanupMsg}</span>}
         </div>
 
-        <div className="bg-white p-4 rounded-lg border border-gray-200 mb-4">
+        <div className="wood-card p-4 mb-4">
           <div className="flex flex-wrap gap-3 items-center mb-3">
             <button
               onClick={toggleEraser}
               className={`px-3 py-1.5 rounded text-sm ${
-                eraserOn ? 'bg-brand-500 text-white' : 'bg-gray-100 text-gray-700'
+                eraserOn ? 'bg-walnut-700 text-cream-50' : 'bg-cream-100 text-walnut-700'
               }`}
             >
               {eraserOn ? '✓ 橡皮擦啟用中' : '🧽 啟用橡皮擦'}
@@ -384,7 +403,7 @@ export default function AddClothingPage() {
           </select>
           <button
             onClick={goToAnchorStep}
-            className="bg-brand-500 hover:bg-brand-600 text-white px-4 py-2 rounded text-sm"
+            className="bg-walnut-700 hover:bg-walnut-800 text-cream-50 px-4 py-2 rounded text-sm"
           >
             下一步 →
           </button>
@@ -393,13 +412,13 @@ export default function AddClothingPage() {
 
       {/* Step 2: anchors */}
       {step === 'anchors' && editedDataUrl && (
-        <div className="bg-white p-4 rounded-lg border border-gray-200 mb-4">
+        <div className="wood-card p-4 mb-4">
           <p className="text-sm text-gray-700 mb-3">
             將兩個圓點分別拖到衣物的 <strong>{labels.left}</strong> 與 <strong>{labels.right}</strong>。試穿時系統會把這條對齊線旋轉、縮放，貼合您身體上對應的位置。
           </p>
           <AnchorPicker
             imageDataUrl={editedDataUrl}
-            initialAnchors={anchors}
+            anchors={anchors}
             leftLabel={labels.left}
             rightLabel={labels.right}
             onChange={setAnchors}
@@ -410,7 +429,7 @@ export default function AddClothingPage() {
             </button>
             <button
               onClick={() => setStep('meta')}
-              className="bg-brand-500 hover:bg-brand-600 text-white px-4 py-2 rounded text-sm"
+              className="bg-walnut-700 hover:bg-walnut-800 text-cream-50 px-4 py-2 rounded text-sm"
             >
               下一步 →
             </button>
@@ -420,7 +439,7 @@ export default function AddClothingPage() {
 
       {/* Step 3: meta + save */}
       {(step === 'meta' || step === 'saving') && editedDataUrl && (
-        <div className="bg-white p-4 rounded-lg border border-gray-200 grid gap-3 sm:grid-cols-3 items-end">
+        <div className="wood-card p-4 grid gap-3 sm:grid-cols-3 items-end">
           <div className="sm:col-span-1">
             <p className="text-xs text-gray-500 mb-1">預覽</p>
             <img src={editedDataUrl} alt="" className="max-h-40 mx-auto" />
@@ -450,7 +469,7 @@ export default function AddClothingPage() {
             <button
               onClick={handleSave}
               disabled={step === 'saving'}
-              className="w-full bg-brand-500 hover:bg-brand-600 disabled:bg-gray-400 text-white py-2 rounded"
+              className="w-full bg-walnut-700 hover:bg-walnut-800 disabled:bg-stone-300 text-cream-50 py-2 rounded"
             >
               {step === 'saving' ? '儲存中…' : '儲存到衣櫥'}
             </button>

@@ -62,9 +62,14 @@ export async function aiCleanupViaPuter(
   return cnv.toDataURL('image/png');
 }
 
-// Pure-canvas cleanup: gray-world auto white balance + light contrast and
-// saturation push. Operates only on opaque pixels so transparent borders
-// are preserved.
+// Pure-canvas gentle enhance. Earlier versions used gray-world auto white
+// balance which distorted colourful clothing (a red shirt got pulled toward
+// gray). The new pipeline:
+//   1) White-patch white balance only when the brightest pixels are clearly
+//      off-white — otherwise leave colour alone.
+//   2) Mild contrast (×1.04) to lift dull captures without crushing.
+//   3) Tiny saturation boost (×1.05).
+// Operates only on opaque pixels so transparent borders stay clean.
 export async function aiCleanupCanvas(dataUrl: string): Promise<string> {
   const img = await loadImage(dataUrl);
   const cnv = document.createElement('canvas');
@@ -76,28 +81,43 @@ export async function aiCleanupCanvas(dataUrl: string): Promise<string> {
   const imgData = ctx.getImageData(0, 0, cnv.width, cnv.height);
   const px = imgData.data;
 
-  let rSum = 0, gSum = 0, bSum = 0, count = 0;
+  // White-patch: collect the brightest 5% of opaque pixels by luma. If their
+  // average isn't already near white, gently nudge it toward white.
+  const luma: Array<{ i: number; l: number }> = [];
   for (let i = 0; i < px.length; i += 4) {
     if (px[i + 3] > 32) {
-      rSum += px[i];
-      gSum += px[i + 1];
-      bSum += px[i + 2];
-      count++;
+      const l = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
+      luma.push({ i, l });
     }
   }
-  if (count === 0) return dataUrl;
+  if (luma.length === 0) return dataUrl;
+  luma.sort((a, b) => b.l - a.l);
+  const topN = Math.max(1, Math.floor(luma.length * 0.05));
+  let rSum = 0, gSum = 0, bSum = 0;
+  for (let k = 0; k < topN; k++) {
+    const i = luma[k].i;
+    rSum += px[i];
+    gSum += px[i + 1];
+    bSum += px[i + 2];
+  }
+  const rTop = rSum / topN;
+  const gTop = gSum / topN;
+  const bTop = bSum / topN;
+  const topAvg = (rTop + gTop + bTop) / 3;
 
-  const rAvg = rSum / count;
-  const gAvg = gSum / count;
-  const bAvg = bSum / count;
-  const grayAvg = (rAvg + gAvg + bAvg) / 3;
-  const clampGain = (v: number) => Math.max(0.75, Math.min(1.35, v));
-  const rG = clampGain(grayAvg / Math.max(rAvg, 1));
-  const gG = clampGain(grayAvg / Math.max(gAvg, 1));
-  const bG = clampGain(grayAvg / Math.max(bAvg, 1));
+  // Only correct if the brightest patch is meaningfully tinted (channel
+  // deviation > 6) AND not already very close to white. Otherwise skip WB.
+  const channelSpread = Math.max(rTop, gTop, bTop) - Math.min(rTop, gTop, bTop);
+  let rG = 1, gG = 1, bG = 1;
+  if (channelSpread > 6 && topAvg < 245) {
+    const target = Math.min(245, topAvg + 8); // mild push, never blow out
+    rG = clampGain(target / Math.max(rTop, 1));
+    gG = clampGain(target / Math.max(gTop, 1));
+    bG = clampGain(target / Math.max(bTop, 1));
+  }
 
-  const contrast = 1.06;
-  const sat = 1.10;
+  const contrast = 1.04;
+  const sat = 1.05;
   for (let i = 0; i < px.length; i += 4) {
     if (px[i + 3] === 0) continue;
     let r = px[i] * rG;
@@ -116,6 +136,10 @@ export async function aiCleanupCanvas(dataUrl: string): Promise<string> {
   }
   ctx.putImageData(imgData, 0, 0);
   return cnv.toDataURL('image/png');
+}
+
+function clampGain(v: number) {
+  return v < 0.92 ? 0.92 : v > 1.12 ? 1.12 : v;
 }
 
 function clamp255(v: number) {
