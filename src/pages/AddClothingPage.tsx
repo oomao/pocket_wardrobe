@@ -1,4 +1,4 @@
-import { ChangeEvent, ReactNode, useEffect, useRef, useState } from 'react';
+import { ChangeEvent, ReactNode, RefObject, useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWardrobe } from '../context/WardrobeContext';
 import {
@@ -25,21 +25,23 @@ type Step = 'idle' | 'editing' | 'anchors' | 'meta' | 'saving';
 function PinchZoomWrapper({
   children,
   zoom,
-  setZoom,
+  zoomTo,
   pannable,
+  wrapperRef,
 }: {
   children: ReactNode;
   zoom: number;
-  setZoom: (z: number) => void;
+  /** Sets a new zoom level while keeping the given (focal) wrapper-local point fixed under the pointer. */
+  zoomTo: (newZoom: number, focalX?: number, focalY?: number) => void;
   pannable: boolean;
+  wrapperRef: RefObject<HTMLDivElement>;
 }) {
-  const ref = useRef<HTMLDivElement | null>(null);
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const pinchStart = useRef<{ dist: number; zoom: number } | null>(null);
   const panStart = useRef<{ x: number; y: number; sl: number; st: number } | null>(null);
 
   useEffect(() => {
-    const el = ref.current;
+    const el = wrapperRef.current;
     if (!el) return;
     const onDown = (e: PointerEvent) => {
       pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -62,7 +64,10 @@ function PinchZoomWrapper({
         const d = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
         const ratio = d / pinchStart.current.dist;
         const next = Math.max(25, Math.min(300, Math.round(pinchStart.current.zoom * ratio)));
-        setZoom(next);
+        const rect = el.getBoundingClientRect();
+        const focalX = (pts[0].x + pts[1].x) / 2 - rect.left;
+        const focalY = (pts[0].y + pts[1].y) / 2 - rect.top;
+        zoomTo(next, focalX, focalY);
         e.preventDefault();
       } else if (pointers.current.size === 1 && pannable && panStart.current) {
         el.scrollLeft = panStart.current.sl - (e.clientX - panStart.current.x);
@@ -79,7 +84,8 @@ function PinchZoomWrapper({
       if (!e.ctrlKey) return;
       e.preventDefault();
       const next = Math.max(25, Math.min(300, Math.round(zoom * (e.deltaY < 0 ? 1.1 : 0.9))));
-      setZoom(next);
+      const rect = el.getBoundingClientRect();
+      zoomTo(next, e.clientX - rect.left, e.clientY - rect.top);
     };
     el.addEventListener('pointerdown', onDown);
     el.addEventListener('pointermove', onMove, { passive: false });
@@ -93,11 +99,11 @@ function PinchZoomWrapper({
       el.removeEventListener('pointercancel', onUp);
       el.removeEventListener('wheel', onWheel);
     };
-  }, [zoom, setZoom, pannable]);
+  }, [zoom, zoomTo, pannable, wrapperRef]);
 
   return (
     <div
-      ref={ref}
+      ref={wrapperRef}
       className="canvas-wrapper overflow-auto bg-[conic-gradient(at_50%_50%,#f3f4f6_25%,#fff_0_50%,#f3f4f6_0_75%,#fff_0)] bg-[length:16px_16px]"
       style={{ maxHeight: '55vh', touchAction: 'none' }}
     >
@@ -130,6 +136,33 @@ export default function AddClothingPage() {
   const [brushSize, setBrushSize] = useState(30);
   const [zoom, setZoom] = useState(100);
   const [canUndo, setCanUndo] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const zoomRef = useRef(100);
+  useEffect(() => {
+    zoomRef.current = zoom;
+  }, [zoom]);
+
+  // Zoom that keeps the focal point (default = wrapper centre) fixed under
+  // the user's pointer instead of always anchoring to the top-left corner.
+  const zoomTo = useCallback((newZoom: number, focalX?: number, focalY?: number) => {
+    const el = wrapperRef.current;
+    const prev = zoomRef.current;
+    if (!el || prev <= 0) {
+      setZoom(newZoom);
+      return;
+    }
+    const rect = el.getBoundingClientRect();
+    const fx = focalX ?? rect.width / 2;
+    const fy = focalY ?? rect.height / 2;
+    const contentX = el.scrollLeft + fx;
+    const contentY = el.scrollTop + fy;
+    const ratio = newZoom / prev;
+    setZoom(newZoom);
+    requestAnimationFrame(() => {
+      el.scrollLeft = contentX * ratio - fx;
+      el.scrollTop = contentY * ratio - fy;
+    });
+  }, []);
 
   // pipeline state
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -423,12 +456,20 @@ export default function AddClothingPage() {
             </label>
             <label className="flex items-center gap-2 text-sm">
               縮放
-              <input type="range" min={25} max={300} step={5} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} className="w-24 sm:w-32" />
+              <input
+                type="range"
+                min={25}
+                max={300}
+                step={5}
+                value={zoom}
+                onChange={(e) => zoomTo(Number(e.target.value))}
+                className="w-24 sm:w-32"
+              />
               <span className="text-stone-500 w-12 text-right">{zoom}%</span>
             </label>
           </div>
 
-          <PinchZoomWrapper zoom={zoom} setZoom={setZoom} pannable={!eraserOn}>
+          <PinchZoomWrapper zoom={zoom} zoomTo={zoomTo} pannable={!eraserOn} wrapperRef={wrapperRef}>
             <canvas ref={canvasRef} style={{ display: 'block', width: `${zoom}%`, height: 'auto', maxWidth: 'none' }} />
           </PinchZoomWrapper>
           <p className="text-xs text-stone-400 mt-2">
