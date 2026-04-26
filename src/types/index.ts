@@ -46,6 +46,27 @@ export function defaultAnchorsForCategory(category: string): ClothingAnchors {
 // Used so that adding an outer 外套 to an existing 上衣 automatically lands
 // on top of the shirt, etc. — without the user having to fiddle with the
 // 上移/下移一層 buttons.
+// Try-on canvas backgrounds — selectable to give the room different moods.
+export interface CanvasBackground {
+  id: string;
+  label: string;
+  /** CSS background value, e.g. solid color or gradient. */
+  css: string;
+  /** Use light text/UI on top? (for darker backgrounds in future) */
+  dark?: boolean;
+}
+
+export const CANVAS_BACKGROUNDS: CanvasBackground[] = [
+  { id: 'studio',  label: '攝影棚白',  css: 'linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%)' },
+  { id: 'cream',   label: '米色暖調',  css: 'linear-gradient(180deg, #faf5ec 0%, #ebe1ce 100%)' },
+  { id: 'rose',    label: '柔粉漸層',  css: 'linear-gradient(180deg, #fff1f2 0%, #fbcfe8 100%)' },
+  { id: 'mist',    label: '冷霧灰',    css: 'linear-gradient(180deg, #f8fafc 0%, #cbd5e1 100%)' },
+  { id: 'sand',    label: '沙漠米',    css: 'linear-gradient(180deg, #fdf6e3 0%, #d6c39c 100%)' },
+  { id: 'grid',    label: '透明格紋',  css: 'conic-gradient(at 50% 50%, #f3f4f6 25%, #fff 0 50%, #f3f4f6 0 75%, #fff 0) 0 0 / 16px 16px' },
+];
+
+export const DEFAULT_BACKGROUND_ID = 'studio';
+
 export const CATEGORY_Z_ORDER: Record<string, number> = {
   鞋子: 1,
   下著: 2,

@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useWardrobe } from '../context/WardrobeContext';
-import { Clothing } from '../types';
+import { CANVAS_BACKGROUNDS, Clothing, DEFAULT_BACKGROUND_ID } from '../types';
 import {
   getAllClothing,
   getClothingById,
@@ -31,6 +31,13 @@ export default function TryOnPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [poseStatus, setPoseStatus] = useState<'idle' | 'detecting' | 'ready' | 'failed'>('idle');
   const [clothingCount, setClothingCount] = useState(0);
+  const [bgId, setBgId] = useState<string>(
+    () => localStorage.getItem('pw_canvas_bg') || DEFAULT_BACKGROUND_ID,
+  );
+  useEffect(() => {
+    localStorage.setItem('pw_canvas_bg', bgId);
+  }, [bgId]);
+  const bg = CANVAS_BACKGROUNDS.find((b) => b.id === bgId) ?? CANVAS_BACKGROUNDS[0];
 
   useLayoutEffect(() => {
     if (!wrapperRef.current) return;
@@ -147,8 +154,30 @@ export default function TryOnPage() {
           </button>
         </div>
 
+        {/* Background picker */}
+        <div className="flex gap-1.5 mb-3 overflow-x-auto pb-1">
+          {CANVAS_BACKGROUNDS.map((b) => (
+            <button
+              key={b.id}
+              onClick={() => setBgId(b.id)}
+              className={`shrink-0 flex flex-col items-center gap-1 ${
+                bgId === b.id ? 'opacity-100' : 'opacity-65 hover:opacity-100'
+              }`}
+              title={b.label}
+            >
+              <span
+                className={`block w-8 h-8 rounded-full border-2 ${
+                  bgId === b.id ? 'border-brand-500 ring-2 ring-brand-500/30' : 'border-white shadow'
+                }`}
+                style={{ background: b.css }}
+              />
+              <span className="text-[10px] text-gray-500">{b.label}</span>
+            </button>
+          ))}
+        </div>
+
         <div className="relative inline-block max-w-full">
-          <div ref={wrapperRef} className="tryon-frame">
+          <div ref={wrapperRef} className="tryon-frame" style={{ background: bg.css }}>
             <canvas ref={canvasRef} className="block max-w-full" style={{ touchAction: 'none' }} />
           </div>
           {clothingCount === 0 && size.w > 0 && (

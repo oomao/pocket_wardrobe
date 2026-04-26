@@ -38,7 +38,7 @@ export class TryOnController {
     this.canvas = new fabric.Canvas(el, {
       width,
       height,
-      backgroundColor: '#fafafa',
+      backgroundColor: 'transparent',
       preserveObjectStacking: true,
       selection: false,
     });

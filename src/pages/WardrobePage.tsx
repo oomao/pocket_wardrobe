@@ -29,9 +29,15 @@ export default function WardrobePage() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-2xl font-bold">我的衣櫥</h2>
-        <Link to="/add" className="bg-brand-500 hover:bg-brand-600 text-white px-4 py-2 rounded-lg text-sm">
+      <div className="flex justify-between items-center mb-5">
+        <div>
+          <h2 className="text-2xl font-bold">我的衣櫥</h2>
+          <p className="text-xs text-gray-400 mt-0.5">{items.length} 件衣物 · {categories.length} 個分類</p>
+        </div>
+        <Link
+          to="/add"
+          className="bg-gray-900 hover:bg-black text-white px-4 py-2 rounded-xl text-sm shadow-sm transition-colors"
+        >
           ➕ 新增衣物
         </Link>
       </div>
