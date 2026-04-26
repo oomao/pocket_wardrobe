@@ -23,98 +23,90 @@ export interface RunOptions extends AITryOnConfig {
 
 // Curated list of public HF Spaces the user can pick from. Ordered by
 // quality / suitability so the first item is the recommended default.
+// Liveness verified 2026-04 against the HF API (/info endpoint).
 export interface HFSpacePreset {
   id: string;
   label: string;
   description: string;
   spaceId: string;
   endpoint: string;
-  badge?: '推薦' | '快' | '通用' | '經典';
+  badge?: '推薦' | '快' | '通用' | '經典' | '需 Token';
+  /** Build the call payload object for this Space's predict call. Returning a
+   *  plain object lets each Space declare its own parameter names without
+   *  forcing the runner to try a list of guesses.
+   */
+  buildPayload?: (person: any, garment: any, category: string) => Record<string, any>;
 }
 
 export const HF_SPACE_PRESETS: HFSpacePreset[] = [
   {
-    id: 'qwen-tryon',
-    label: 'Qwen 試穿衣服 (專版)',
-    description: 'Qwen-Image-Edit 社群微調，專為服飾試穿任務。盲測效果勝過 Gemini 2.5 Flash Image。',
-    spaceId: 'JamesDigitalOcean/Qwen_Image_Edit_Try_On_Clothes',
-    endpoint: '/predict',
+    id: 'ootd',
+    label: 'OOTDiffusion (推薦)',
+    description: 'AAAI 2024，~6.3k stars。匿名公開、2.3s 喚醒、API 穩定。實測 2026/4 可用。',
+    spaceId: 'levihsu/OOTDiffusion',
+    endpoint: '/process_hd',
     badge: '推薦',
-  },
-  {
-    id: 'qwen-edit',
-    label: 'Qwen-Image-Edit 2511',
-    description: '阿里巴巴官方通用圖像編輯模型 (2026)，多模態強，靠 prompt 控制。',
-    spaceId: 'Qwen/Qwen-Image-Edit-2511',
-    endpoint: '/predict',
-    badge: '通用',
-  },
-  {
-    id: 'flux-kontext',
-    label: 'FLUX.1 Kontext-Dev',
-    description: 'Black Forest Labs 通用圖像編輯 SOTA，社群微調最多。',
-    spaceId: 'black-forest-labs/FLUX.1-Kontext-Dev',
-    endpoint: '/predict',
-    badge: '通用',
-  },
-  {
-    id: 'kolors',
-    label: 'Kolors-VTON',
-    description: '快手 Kuaishou 專用虛擬試穿模型，速度快。',
-    spaceId: 'Kwai-Kolors/Kolors-Virtual-Try-On',
-    endpoint: '/tryon',
-    badge: '快',
-  },
-  {
-    id: 'catvton',
-    label: 'CatVTON',
-    description: 'ICLR 2025 輕量試穿，參數 ~899M，記憶體佔用小。',
-    spaceId: 'zhengchong/CatVTON',
-    endpoint: '/process',
-    badge: '經典',
+    buildPayload: (person, garment) => ({
+      vton_img: person,
+      garm_img: garment,
+      n_samples: 1,
+      n_steps: 20,
+      image_scale: 2,
+      seed: -1,
+    }),
   },
   {
     id: 'idm-vton',
     label: 'IDM-VTON',
-    description: '經典 SOTA，模組化架構，文件齊全。',
+    description: '經典 SOTA。匿名公開、API 穩定、自動 masking。實測 2026/4 可用。',
     spaceId: 'yisol/IDM-VTON',
-    endpoint: '/predict',
-    badge: '經典',
+    endpoint: '/tryon',
+    badge: '推薦',
+    buildPayload: (person, garment, category) => ({
+      dict: { background: person, layers: [], composite: null },
+      garm_img: garment,
+      garment_des: idmVtonGarmentDescription(category),
+      is_checked: true,        // auto-mask
+      is_checked_crop: false,
+      denoise_steps: 20,
+      seed: 42,
+    }),
   },
   {
-    id: 'ootd',
-    label: 'OOTDiffusion',
-    description: 'AAAI 2024，社群 6.3k stars。穩定的 baseline。',
-    spaceId: 'levihsu/OOTDiffusion',
+    id: 'qwen-edit',
+    label: 'Qwen-Image-Edit 2511',
+    description: '阿里巴巴官方通用編輯模型 (2026)，盲測勝過 Gemini 2.5。需 HF Token（ZeroGPU）。',
+    spaceId: 'Qwen/Qwen-Image-Edit-2511',
     endpoint: '/predict',
-    badge: '經典',
+    badge: '需 Token',
+  },
+  {
+    id: 'flux-kontext',
+    label: 'FLUX.1 Kontext-Dev',
+    description: 'Black Forest Labs 通用編輯 SOTA。需 HF Token（ZeroGPU）。',
+    spaceId: 'black-forest-labs/FLUX.1-Kontext-Dev',
+    endpoint: '/predict',
+    badge: '需 Token',
   },
 ];
 
-// Default Space — Kolors-VTON has the most stable public API of the
-// try-on family and a well-known endpoint name. Users can switch via the
-// model picker to Qwen / FLUX / etc. for higher quality.
-export const DEFAULT_CONFIG: AITryOnConfig = {
-  spaceId: 'Kwai-Kolors/Kolors-Virtual-Try-On',
-  endpoint: '/tryon',
-};
+function idmVtonGarmentDescription(category: string): string {
+  switch (category) {
+    case '上衣': return 'a top';
+    case '外套': return 'an outer jacket';
+    case '下著': return 'pants';
+    case '連身': return 'a one-piece dress';
+    case '鞋子': return 'shoes';
+    case '配件': return 'an accessory';
+    default: return 'clothing';
+  }
+}
 
-// Fallback chain — if the user's chosen Space can't be resolved (sleeping
-// / removed / CORS blocked) we walk through these. Ordered by quality:
-//   1. Qwen try-on (purpose-built fine-tune of Qwen-Image-Edit)
-//   2. Qwen-Image-Edit-2511 (general edit, can do try-on via prompt)
-//   3. FLUX.1 Kontext-Dev (general edit)
-//   4. Kolors-VTON (try-on specialist)
-//   5–7. CatVTON / IDM-VTON / OOTDiffusion (older but reliable)
-export const FALLBACK_SPACES: Array<{ spaceId: string; endpoint: string }> = [
-  { spaceId: 'JamesDigitalOcean/Qwen_Image_Edit_Try_On_Clothes', endpoint: '/predict' },
-  { spaceId: 'Qwen/Qwen-Image-Edit-2511',                        endpoint: '/predict' },
-  { spaceId: 'black-forest-labs/FLUX.1-Kontext-Dev',             endpoint: '/predict' },
-  { spaceId: 'Kwai-Kolors/Kolors-Virtual-Try-On',                endpoint: '/tryon' },
-  { spaceId: 'zhengchong/CatVTON',                               endpoint: '/process' },
-  { spaceId: 'yisol/IDM-VTON',                                   endpoint: '/predict' },
-  { spaceId: 'levihsu/OOTDiffusion',                             endpoint: '/predict' },
-];
+// Default — OOTDiffusion (verified alive 2026-04, simplest open API).
+export const DEFAULT_CONFIG: AITryOnConfig = {
+  spaceId: 'levihsu/OOTDiffusion',
+  endpoint: '/process_hd',
+};
 
 // Map our wardrobe categories to the cloth-type taxonomy commonly used by
 // VTON models. Most spaces accept upper / lower / overall / dress.
@@ -248,26 +240,21 @@ async function runOneSpace(
 
   const endpoint = opts.endpoint || DEFAULT_CONFIG.endpoint!;
 
-  // We try the most common parameter shapes in turn. First success wins.
-  const attempts: Array<() => Promise<unknown>> = [
-    // a) named: person_image, cloth_image, cloth_type
-    () =>
-      client.predict(endpoint, {
-        person_image: personFile,
-        cloth_image: garmentFile,
-        cloth_type: clothType,
-      }),
-    // b) positional with cloth type
-    () => client.predict(endpoint, [personFile, garmentFile, clothType]),
-    // c) positional, two images only
-    () => client.predict(endpoint, [personFile, garmentFile]),
-    // d) Kolors-style (person_img, garment_img, seed, …)
-    () =>
-      client.predict(endpoint, {
-        person_img: personFile,
-        garment_img: garmentFile,
-      }),
-  ];
+  // Look up the preset that matches this Space so we know the exact
+  // parameter shape. If it isn't in our catalogue we fall back to a small
+  // guess-list (legacy behaviour) for forward-compat with custom Spaces.
+  const preset = HF_SPACE_PRESETS.find(
+    (p) => p.spaceId === opts.spaceId && p.endpoint === endpoint,
+  );
+
+  const attempts: Array<() => Promise<unknown>> = preset?.buildPayload
+    ? [() => client.predict(endpoint, preset.buildPayload!(personFile, garmentFile, opts.category))]
+    : [
+        () => client.predict(endpoint, { person_image: personFile, cloth_image: garmentFile, cloth_type: clothType }),
+        () => client.predict(endpoint, [personFile, garmentFile, clothType]),
+        () => client.predict(endpoint, [personFile, garmentFile]),
+        () => client.predict(endpoint, { person_img: personFile, garment_img: garmentFile }),
+      ];
 
   onStatus?.('processing', 'AI 推論中（30–90 秒）…');
   let lastError: unknown = null;
