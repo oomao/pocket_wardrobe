@@ -4,6 +4,7 @@ import { useWardrobe } from '../context/WardrobeContext';
 import { blobToDataURL, cropTransparent, removeBackground } from '../services/imageProcessing';
 import { saveClothing } from '../services/storage';
 import { EditorCanvas } from '../services/editorCanvas';
+import { aiCleanupCanvas, aiCleanupViaPuter } from '../services/aiCleanup';
 import AnchorPicker from '../components/AnchorPicker';
 import {
   ANCHORS_USED_BY_CATEGORY,
@@ -125,6 +126,8 @@ export default function AddClothingPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [editedDataUrl, setEditedDataUrl] = useState<string | null>(null);
   const [anchors, setAnchors] = useState<ClothingAnchors>(defaultAnchorsForCategory('上衣'));
+  const [cleanupBusy, setCleanupBusy] = useState<null | 'puter' | 'canvas'>(null);
+  const [cleanupMsg, setCleanupMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (!category && categories.length) setCategory(categories[0]);
@@ -173,6 +176,30 @@ export default function AddClothingPage() {
   };
 
   const handleUndo = () => editorRef.current?.undo();
+
+  const runCleanup = async (kind: 'puter' | 'canvas') => {
+    const ed = editorRef.current;
+    if (!ed) return;
+    setCleanupBusy(kind);
+    setCleanupMsg(null);
+    setErrorMsg(null);
+    try {
+      const current = ed.exportDataURL();
+      const next =
+        kind === 'puter'
+          ? await aiCleanupViaPuter(current, (m) => setCleanupMsg(m))
+          : await aiCleanupCanvas(current);
+      await ed.replaceImage(next);
+      setCanUndo(false);
+      setCleanupMsg(kind === 'puter' ? 'AI 還原完成 ✅' : '自動調色完成 ✅');
+    } catch (err: any) {
+      console.error(err);
+      setErrorMsg(`處理失敗：${err?.message || String(err)}`);
+      setCleanupMsg(null);
+    } finally {
+      setCleanupBusy(null);
+    }
+  };
 
   const goToAnchorStep = async () => {
     if (!editorRef.current) return;
@@ -270,6 +297,28 @@ export default function AddClothingPage() {
 
       {/* Step 1: editor */}
       <div className={step === 'editing' ? 'block' : 'hidden'}>
+        {/* Cleanup row */}
+        <div className="bg-white p-3 rounded-lg border border-gray-200 mb-3 flex flex-wrap gap-2 items-center">
+          <span className="text-xs text-gray-500 mr-1">還原服飾原色：</span>
+          <button
+            onClick={() => runCleanup('puter')}
+            disabled={cleanupBusy !== null}
+            className="px-3 py-1.5 rounded bg-gray-900 text-white text-xs disabled:opacity-50 hover:bg-black"
+            title="呼叫 Google Nano Banana 重繪商品圖。首次使用需登入 Puter（30 秒、免費）。"
+          >
+            {cleanupBusy === 'puter' ? '處理中…' : '✨ AI 還原原色'}
+          </button>
+          <button
+            onClick={() => runCleanup('canvas')}
+            disabled={cleanupBusy !== null}
+            className="px-3 py-1.5 rounded bg-white border border-gray-300 hover:border-brand-500 text-xs disabled:opacity-50"
+            title="本機自動白平衡 + 對比 / 飽和度微調。瞬間完成，無需註冊。"
+          >
+            {cleanupBusy === 'canvas' ? '處理中…' : '🎨 自動調色（本機）'}
+          </button>
+          {cleanupMsg && <span className="text-xs text-emerald-600">{cleanupMsg}</span>}
+        </div>
+
         <div className="bg-white p-4 rounded-lg border border-gray-200 mb-4">
           <div className="flex flex-wrap gap-3 items-center mb-3">
             <button

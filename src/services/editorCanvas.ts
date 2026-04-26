@@ -30,6 +30,12 @@ export class EditorCanvas {
     this.onChange = fn;
   }
 
+  // Reload from a fresh data URL — useful after AI cleanup or auto WB has
+  // produced a new version of the image. Resets the undo stack.
+  async replaceImage(src: string, maxSize = 800) {
+    return this.loadImage(src, maxSize);
+  }
+
   async loadImage(src: string, maxSize = 800) {
     const img = await loadImage(src);
     const ratio = Math.min(1, maxSize / Math.max(img.width, img.height));
