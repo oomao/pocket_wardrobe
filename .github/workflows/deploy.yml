@@ -23,7 +23,10 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - run: npm ci
+      # Use npm install (not ci) so a slightly out-of-sync lockfile won't
+      # block the deploy — local dev hits this often with the many AI deps
+      # we install/regenerate when iterating.
+      - run: npm install --no-audit --no-fund
       - run: npm run build
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
