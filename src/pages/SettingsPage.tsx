@@ -2,22 +2,20 @@ import { ChangeEvent, useState } from 'react';
 import { useWardrobe } from '../context/WardrobeContext';
 import AvatarPreview from '../components/AvatarPreview';
 import { countClothingByCategory } from '../services/storage';
+import { blobToDataURL, removeBackground } from '../services/imageProcessing';
 import { AvatarMode, Gender, HEIGHT_RANGE, WEIGHT_RANGE } from '../types';
 
-function fileToDataURL(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(r.result as string);
-    r.onerror = () => reject(r.error);
-    r.readAsDataURL(file);
-  });
-}
+type PhotoStep = 'idle' | 'processing' | 'error';
 
 export default function SettingsPage() {
   const { categories, setCategories, profile, setProfile } = useWardrobe();
   const [newCat, setNewCat] = useState('');
   const [draftProfile, setDraftProfile] = useState(profile);
   const [busy, setBusy] = useState(false);
+  const [photoStep, setPhotoStep] = useState<PhotoStep>('idle');
+  const [photoProgress, setPhotoProgress] = useState<{ current: number; total: number } | null>(null);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const [autoRemoveBg, setAutoRemoveBg] = useState(true);
 
   const addCategory = async () => {
     const name = newCat.trim();
@@ -43,9 +41,28 @@ export default function SettingsPage() {
 
   const onPhoto = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-pick same file
     if (!file) return;
-    const url = await fileToDataURL(file);
-    setDraftProfile({ ...draftProfile, photoBase64: url, avatarMode: 'photo' });
+    setPhotoError(null);
+    setPhotoStep('processing');
+    setPhotoProgress(null);
+    try {
+      let dataUrl: string;
+      if (autoRemoveBg) {
+        const blob = await removeBackground(file, (_k, current, total) =>
+          setPhotoProgress({ current, total }),
+        );
+        dataUrl = await blobToDataURL(blob);
+      } else {
+        dataUrl = await blobToDataURL(file);
+      }
+      setDraftProfile((p) => ({ ...p, photoBase64: dataUrl, avatarMode: 'photo' }));
+      setPhotoStep('idle');
+    } catch (err) {
+      console.error(err);
+      setPhotoError('處理失敗，請改用其他照片再試。');
+      setPhotoStep('error');
+    }
   };
 
   const removePhoto = () =>
@@ -201,27 +218,87 @@ export default function SettingsPage() {
                 </>
               )}
 
-              {/* Photo upload — always visible */}
+              {/* Photo upload */}
               <div>
-                <p className="text-sm font-medium mb-1">我的照片（選填）</p>
+                <p className="text-sm font-medium mb-2">我的照片（選填）</p>
+
+                {/* Guide card */}
+                <div className="rounded-md border border-gray-200 bg-gray-50 p-3 mb-3 text-xs leading-relaxed">
+                  <p className="font-semibold text-gray-700 mb-2">📋 拍照建議</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-emerald-700 font-medium mb-1">✅ 適合</p>
+                      <ul className="space-y-0.5 text-gray-600 list-disc pl-4">
+                        <li>全身入鏡（頭到腳）</li>
+                        <li>正面、雙手自然放下</li>
+                        <li>單一純色背景（白牆/淺色牆）</li>
+                        <li>光線充足、不逆光</li>
+                        <li>身穿貼身或簡單衣物</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="text-rose-700 font-medium mb-1">❌ 避免</p>
+                      <ul className="space-y-0.5 text-gray-600 list-disc pl-4">
+                        <li>半身、側身、坐姿</li>
+                        <li>多人或背景人物</li>
+                        <li>雜亂背景、反光鏡面</li>
+                        <li>陰影過深或逆光</li>
+                        <li>遮擋身體輪廓的寬鬆衣物</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                <label className="flex items-center gap-2 mb-2 text-xs text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={autoRemoveBg}
+                    onChange={(e) => setAutoRemoveBg(e.target.checked)}
+                  />
+                  上傳後自動 AI 去背（建議開啟，背景變透明後可乾淨疊上衣物）
+                </label>
+
                 <div className="flex flex-wrap gap-2">
-                  <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded text-sm">
+                  <label className={`cursor-pointer bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded text-sm ${photoStep === 'processing' ? 'opacity-50 pointer-events-none' : ''}`}>
                     📷 拍照
                     <input type="file" accept="image/*" capture="environment" onChange={onPhoto} className="hidden" />
                   </label>
-                  <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded text-sm">
+                  <label className={`cursor-pointer bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded text-sm ${photoStep === 'processing' ? 'opacity-50 pointer-events-none' : ''}`}>
                     🖼️ 選擇照片
                     <input type="file" accept="image/*" onChange={onPhoto} className="hidden" />
                   </label>
-                  {draftProfile.photoBase64 && (
+                  {draftProfile.photoBase64 && photoStep !== 'processing' && (
                     <button onClick={removePhoto} className="bg-red-100 text-red-700 px-3 py-1.5 rounded text-sm">
                       移除照片
                     </button>
                   )}
                 </div>
-                <p className="text-xs text-gray-500 mt-2">
-                  💡 建議拍攝<strong>全身正面</strong>、<strong>雙手放下</strong>、<strong>單一背景</strong>，後續對齊衣服效果更好。
-                </p>
+
+                {photoStep === 'processing' && (
+                  <div className="mt-3 p-3 bg-brand-50 rounded">
+                    <p className="text-sm font-medium text-brand-700">
+                      {autoRemoveBg ? '🤖 AI 去背處理中…' : '🖼️ 載入照片中…'}
+                    </p>
+                    {photoProgress && (
+                      <p className="text-xs text-gray-600 mt-1">
+                        {photoProgress.current} / {photoProgress.total}
+                      </p>
+                    )}
+                    <div className="mt-2 h-1.5 bg-white rounded overflow-hidden">
+                      <div
+                        className="h-full bg-brand-500 transition-all"
+                        style={{ width: photoProgress ? `${(photoProgress.current / Math.max(photoProgress.total, 1)) * 100}%` : '20%' }}
+                      />
+                    </div>
+                    <p className="text-[11px] text-gray-500 mt-2">
+                      首次使用需下載 AI 模型（約 24MB），請稍候。
+                    </p>
+                  </div>
+                )}
+
+                {photoError && (
+                  <p className="text-red-500 text-xs mt-2">{photoError}</p>
+                )}
               </div>
 
               <button
