@@ -1,9 +1,39 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 500" width="200" height="500">
-  <g fill="#f5d0b5" stroke="#1f2937" stroke-width="2">
-    <circle cx="100" cy="55" r="38"/>
-    <path d="M60 100 L60 260 Q60 270 70 270 L130 270 Q140 270 140 260 L140 100 Z" fill="#cbd5e1"/>
-    <path d="M40 110 Q35 200 50 280 L70 275 L70 110 Z"/>
-    <path d="M160 110 Q165 200 150 280 L130 275 L130 110 Z"/>
-    <path d="M75 270 L75 470 L95 470 L100 290 L105 470 L125 470 L125 270 Z" fill="#475569"/>
-  </g>
+  <defs>
+    <linearGradient id="bodyM" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#f1f5f9"/>
+      <stop offset="0.45" stop-color="#e2e8f0"/>
+      <stop offset="1" stop-color="#94a3b8"/>
+    </linearGradient>
+    <linearGradient id="headM" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fde7d0"/>
+      <stop offset="1" stop-color="#e7c7a3"/>
+    </linearGradient>
+  </defs>
+  <!-- Head -->
+  <ellipse cx="100" cy="50" rx="26" ry="32" fill="url(#headM)"/>
+  <!-- Neck -->
+  <path d="M88 78 Q88 95 80 100 L120 100 Q112 95 112 78 Z" fill="url(#headM)" opacity="0.85"/>
+  <!-- Torso (shoulder → waist → hip continuous) -->
+  <path d="M55 102
+           Q35 108 35 132
+           L46 220
+           Q48 248 60 256
+           Q56 290 60 320
+           L140 320
+           Q144 290 140 256
+           Q152 248 154 220
+           L165 132
+           Q165 108 145 102 Z"
+        fill="url(#bodyM)"/>
+  <!-- Left arm -->
+  <path d="M40 122 Q26 200 30 298 L52 298 Q56 200 58 122 Z" fill="url(#bodyM)"/>
+  <!-- Right arm -->
+  <path d="M160 122 Q174 200 170 298 L148 298 Q144 200 142 122 Z" fill="url(#bodyM)"/>
+  <!-- Left leg -->
+  <path d="M64 318 Q60 395 72 472 L96 472 L100 322 Z" fill="url(#bodyM)"/>
+  <!-- Right leg -->
+  <path d="M136 318 Q140 395 128 472 L104 472 L100 322 Z" fill="url(#bodyM)"/>
+  <!-- Subtle center shading to suggest depth -->
+  <ellipse cx="100" cy="180" rx="35" ry="60" fill="#cbd5e1" opacity="0.25"/>
 </svg>

@@ -1,9 +1,12 @@
 export type Gender = 'male' | 'female';
+export type AvatarMode = 'default' | 'photo';
 
 export interface UserProfile {
   gender: Gender;
   heightCm: number;
   weightKg: number;
+  avatarMode: AvatarMode;
+  photoBase64?: string;
 }
 
 export interface Clothing {
@@ -33,7 +36,6 @@ export interface Outfit {
 
 export const DEFAULT_CATEGORIES: string[] = ['上衣', '下著', '外套', '連身', '鞋子', '配件'];
 
-// Reference body used when computing how much the avatar SVG should be scaled.
 export const BASE_HEIGHT_CM = 170;
 export const BASE_WEIGHT_KG = 60;
 
@@ -44,17 +46,37 @@ export const DEFAULT_PROFILE: UserProfile = {
   gender: 'male',
   heightCm: BASE_HEIGHT_CM,
   weightKg: BASE_WEIGHT_KG,
+  avatarMode: 'default',
 };
 
-// Convert real height/weight into avatar SVG transform scales.
-// Width (weight) is dampened so that the avatar doesn't get cartoonishly wide.
 export function profileToScales(profile: UserProfile): { scaleX: number; scaleY: number } {
   const heightRatio = profile.heightCm / BASE_HEIGHT_CM;
   const weightRatio = profile.weightKg / BASE_WEIGHT_KG;
-  // weight contributes via square-root → keeps proportions believable
   const widthFactor = Math.sqrt(weightRatio / heightRatio);
-  return {
-    scaleX: widthFactor,
-    scaleY: heightRatio,
-  };
+  return { scaleX: widthFactor, scaleY: heightRatio };
 }
+
+// Mannequin SVGs use a 200×500 viewBox. Body landmarks below are in those coords.
+export const MANNEQUIN_VIEWBOX = { w: 200, h: 500 };
+
+export interface CategoryBox {
+  topY: number;
+  bottomY: number;
+  leftX: number;
+  rightX: number;
+}
+
+// Where a piece of clothing of each category should land on the mannequin.
+// Coordinates use the SVG viewBox; controller converts to canvas pixels at runtime.
+export const CATEGORY_PLACEMENT: Record<string, CategoryBox> = {
+  上衣: { topY: 105, bottomY: 270, leftX: 30, rightX: 170 },
+  外套: { topY: 100, bottomY: 295, leftX: 22, rightX: 178 },
+  連身: { topY: 105, bottomY: 410, leftX: 30, rightX: 170 },
+  下著: { topY: 285, bottomY: 472, leftX: 55, rightX: 145 },
+  鞋子: { topY: 452, bottomY: 482, leftX: 55, rightX: 145 },
+  配件: { topY: 130, bottomY: 200, leftX: 75, rightX: 125 },
+};
+
+export const DEFAULT_PLACEMENT: CategoryBox = {
+  topY: 150, bottomY: 300, leftX: 55, rightX: 145,
+};

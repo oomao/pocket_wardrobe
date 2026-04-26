@@ -23,14 +23,30 @@ export async function initDB(): Promise<void> {
   const profileRaw = await localforage.getItem<any>(KEY_PROFILE);
   if (!profileRaw) {
     await localforage.setItem(KEY_PROFILE, DEFAULT_PROFILE);
-  } else if (profileRaw.heightCm === undefined || profileRaw.weightKg === undefined) {
-    // Migrate legacy { heightScale, weightScale } → { heightCm, weightKg }
-    const migrated: UserProfile = {
-      gender: profileRaw.gender ?? 'male',
-      heightCm: Math.round(170 * (profileRaw.heightScale ?? 1)),
-      weightKg: Math.round(60 * (profileRaw.weightScale ?? 1)),
-    };
-    await localforage.setItem(KEY_PROFILE, migrated);
+  } else {
+    let migrated = profileRaw as Partial<UserProfile> & Record<string, any>;
+    let dirty = false;
+    if (migrated.heightCm === undefined || migrated.weightKg === undefined) {
+      migrated = {
+        ...migrated,
+        heightCm: Math.round(170 * (profileRaw.heightScale ?? 1)),
+        weightKg: Math.round(60 * (profileRaw.weightScale ?? 1)),
+      };
+      dirty = true;
+    }
+    if (!migrated.avatarMode) {
+      migrated.avatarMode = 'default';
+      dirty = true;
+    }
+    if (dirty) {
+      await localforage.setItem(KEY_PROFILE, {
+        gender: migrated.gender ?? 'male',
+        heightCm: migrated.heightCm!,
+        weightKg: migrated.weightKg!,
+        avatarMode: migrated.avatarMode!,
+        photoBase64: migrated.photoBase64,
+      } as UserProfile);
+    }
   }
   const cats = await localforage.getItem<string[]>(KEY_CATEGORIES);
   if (!cats) {

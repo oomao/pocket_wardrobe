@@ -1,9 +1,39 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 500" width="200" height="500">
-  <g fill="#f5d0b5" stroke="#1f2937" stroke-width="2">
-    <circle cx="100" cy="55" r="36"/>
-    <path d="M65 100 Q60 180 70 270 L130 270 Q140 180 135 100 Z" fill="#fda4af"/>
-    <path d="M45 110 Q40 200 55 280 L72 275 L72 110 Z"/>
-    <path d="M155 110 Q160 200 145 280 L128 275 L128 110 Z"/>
-    <path d="M78 270 L72 470 L95 470 L100 295 L105 470 L128 470 L122 270 Z" fill="#1e293b"/>
-  </g>
+  <defs>
+    <linearGradient id="bodyF" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#f1f5f9"/>
+      <stop offset="0.45" stop-color="#e2e8f0"/>
+      <stop offset="1" stop-color="#94a3b8"/>
+    </linearGradient>
+    <linearGradient id="headF" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fde7d0"/>
+      <stop offset="1" stop-color="#e7c7a3"/>
+    </linearGradient>
+  </defs>
+  <!-- Head -->
+  <ellipse cx="100" cy="52" rx="24" ry="30" fill="url(#headF)"/>
+  <!-- Neck (slimmer) -->
+  <path d="M91 78 Q91 95 84 100 L116 100 Q109 95 109 78 Z" fill="url(#headF)" opacity="0.85"/>
+  <!-- Torso: narrower shoulders, defined waist, fuller hips -->
+  <path d="M62 105
+           Q42 110 42 130
+           L52 200
+           Q55 235 70 245
+           Q60 285 56 320
+           L144 320
+           Q140 285 130 245
+           Q145 235 148 200
+           L158 130
+           Q158 110 138 105 Z"
+        fill="url(#bodyF)"/>
+  <!-- Left arm (slimmer) -->
+  <path d="M46 122 Q34 200 38 298 L54 298 Q58 200 60 122 Z" fill="url(#bodyF)"/>
+  <!-- Right arm (slimmer) -->
+  <path d="M154 122 Q166 200 162 298 L146 298 Q142 200 140 122 Z" fill="url(#bodyF)"/>
+  <!-- Left leg -->
+  <path d="M62 318 Q58 395 70 472 L96 472 L100 322 Z" fill="url(#bodyF)"/>
+  <!-- Right leg -->
+  <path d="M138 318 Q142 395 130 472 L104 472 L100 322 Z" fill="url(#bodyF)"/>
+  <!-- Subtle waist shading -->
+  <ellipse cx="100" cy="180" rx="32" ry="55" fill="#cbd5e1" opacity="0.25"/>
 </svg>
