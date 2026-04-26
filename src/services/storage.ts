@@ -5,6 +5,7 @@ import {
   Outfit,
   Style,
   UserProfile,
+  WearLog,
   DEFAULT_CATEGORIES,
   DEFAULT_PROFILE,
 } from '../types';
@@ -14,6 +15,7 @@ const KEY_CATEGORIES = 'categories';
 const KEY_CLOTHES = 'clothes';
 const KEY_OUTFITS = 'outfits';
 const KEY_STYLES = 'styles';
+const KEY_WEAR_LOGS = 'wear_logs';
 
 localforage.config({
   name: 'pocket_wardrobe',
@@ -65,6 +67,10 @@ export async function initDB(): Promise<void> {
   const styles = await localforage.getItem<Style[]>(KEY_STYLES);
   if (!styles) {
     await localforage.setItem(KEY_STYLES, []);
+  }
+  const logs = await localforage.getItem<WearLog[]>(KEY_WEAR_LOGS);
+  if (!logs) {
+    await localforage.setItem(KEY_WEAR_LOGS, []);
   }
 }
 
@@ -207,4 +213,57 @@ export async function deleteStyle(id: string): Promise<boolean> {
   const next = all.filter((s) => s.id !== id);
   await localforage.setItem(KEY_STYLES, next);
   return next.length !== all.length;
+}
+
+// ─── Wear logs ───────────────────────────────────────────────────────────────
+
+export function todayString(): string {
+  // Local-time YYYY-MM-DD
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+export async function getAllWearLogs(): Promise<WearLog[]> {
+  return (await localforage.getItem<WearLog[]>(KEY_WEAR_LOGS)) ?? [];
+}
+
+export async function getWearLogsByDate(date: string): Promise<WearLog[]> {
+  const all = await getAllWearLogs();
+  return all.filter((l) => l.date === date);
+}
+
+export async function addWearLog(
+  data: Omit<WearLog, 'id' | 'createdAt'>,
+): Promise<WearLog> {
+  const all = await getAllWearLogs();
+  const item: WearLog = { ...data, id: uuid(), createdAt: Date.now() };
+  all.push(item);
+  await localforage.setItem(KEY_WEAR_LOGS, all);
+  return item;
+}
+
+export async function deleteWearLog(id: string): Promise<boolean> {
+  const all = await getAllWearLogs();
+  const next = all.filter((l) => l.id !== id);
+  await localforage.setItem(KEY_WEAR_LOGS, next);
+  return next.length !== all.length;
+}
+
+// Convenience: log today's wear of a set of clothes (also bumps wearCount).
+export async function logWearToday(
+  clotheIds: string[],
+  opts: { outfitId?: string; styleId?: string; note?: string } = {},
+): Promise<void> {
+  if (clotheIds.length === 0) return;
+  await addWearLog({
+    date: todayString(),
+    clotheIds,
+    outfitId: opts.outfitId,
+    styleId: opts.styleId,
+    note: opts.note,
+  });
+  await incrementWearCounts(clotheIds);
 }

@@ -6,7 +6,7 @@ import {
   getAllClothing,
   getClothingById,
   getOutfitById,
-  incrementWearCounts,
+  logWearToday,
   saveOutfit,
 } from '../services/storage';
 import { TryOnController } from '../services/canvasController';
@@ -126,8 +126,8 @@ export default function TryOnPage() {
     }
     const name = prompt('幫這次穿搭取個名字：', `穿搭 ${new Date().toLocaleDateString()}`);
     if (!name) return;
-    await saveOutfit({ name, items });
-    await incrementWearCounts(items.map((i) => i.clotheId));
+    const saved = await saveOutfit({ name, items });
+    await logWearToday(items.map((i) => i.clotheId), { outfitId: saved.id });
     alert('已儲存到穿搭日誌');
     navigate('/library');
   };

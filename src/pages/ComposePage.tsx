@@ -32,6 +32,13 @@ const MODES: ModeCard[] = [
     subtitle: 'Flat-lay',
     description: '不放在身體上，把衣物平面組合成像 Pinterest / 雜誌的搭配卡。適合存「靈感組合」（這三件穿一起的感覺）。',
   },
+  {
+    to: '/shuffle',
+    icon: '🎲',
+    title: '隨機抽搭',
+    subtitle: 'Surprise me',
+    description: '不知道穿什麼？一鍵讓系統從衣櫥隨機抽一套（上 / 下 / 鞋 / 配件），可換單品、直接試穿或存成造型。',
+  },
 ];
 
 export default function ComposePage() {

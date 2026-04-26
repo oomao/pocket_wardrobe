@@ -24,6 +24,7 @@ const navItems: NavItem[] = [
     icon: '📔',
     matches: ['/library', '/styles', '/outfits'],
   },
+  { to: '/insights', label: '數據', icon: '📊' },
   { to: '/settings', label: '設定', icon: '⚙️' },
 ];
 

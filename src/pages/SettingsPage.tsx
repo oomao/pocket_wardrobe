@@ -3,6 +3,7 @@ import { useWardrobe } from '../context/WardrobeContext';
 import AvatarPreview from '../components/AvatarPreview';
 import { countClothingByCategory } from '../services/storage';
 import { blobToDataURL, cropTransparent, removeBackground } from '../services/imageProcessing';
+import { downloadBlob, exportToZip, importFromZip } from '../services/backup';
 import { AvatarMode, Gender, HEIGHT_RANGE, WEIGHT_RANGE } from '../types';
 
 type PhotoStep = 'idle' | 'processing' | 'error';
@@ -16,6 +17,42 @@ export default function SettingsPage() {
   const [photoProgress, setPhotoProgress] = useState<{ current: number; total: number } | null>(null);
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [autoRemoveBg, setAutoRemoveBg] = useState(true);
+  const [backupBusy, setBackupBusy] = useState<'export' | 'import' | null>(null);
+  const [backupMsg, setBackupMsg] = useState<string | null>(null);
+
+  const handleExport = async () => {
+    setBackupBusy('export');
+    setBackupMsg(null);
+    try {
+      const blob = await exportToZip();
+      const fname = `pocket-wardrobe-${new Date().toISOString().slice(0, 10)}.zip`;
+      downloadBlob(blob, fname);
+      setBackupMsg(`已下載 ${fname}（${(blob.size / 1024 / 1024).toFixed(1)} MB）`);
+    } catch (err: any) {
+      setBackupMsg(`匯出失敗：${err?.message || String(err)}`);
+    } finally {
+      setBackupBusy(null);
+    }
+  };
+
+  const handleImport = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!confirm('匯入會「覆蓋」目前裝置上的衣櫥資料（衣物、穿搭、設定都會被換掉）。確定要繼續嗎?')) return;
+    setBackupBusy('import');
+    setBackupMsg(null);
+    try {
+      const summary = await importFromZip(file);
+      setBackupMsg(
+        `已匯入 ${summary.clothes} 件衣物 / ${summary.outfits} 套穿搭 / ${summary.styles} 套造型 / ${summary.wearLogs} 筆紀錄。請重新整理頁面以套用變更。`,
+      );
+    } catch (err: any) {
+      setBackupMsg(`匯入失敗：${err?.message || String(err)}`);
+    } finally {
+      setBackupBusy(null);
+    }
+  };
 
   const addCategory = async () => {
     const name = newCat.trim();
@@ -104,6 +141,30 @@ export default function SettingsPage() {
               新增
             </button>
           </div>
+        </div>
+      </section>
+
+      <section>
+        <h3 className="text-lg font-semibold text-walnut-700 mb-3">💾 備份 / 還原</h3>
+        <div className="wood-card p-5 space-y-3">
+          <p className="text-xs text-stone-500">
+            匯出 ZIP 包含所有衣物圖、穿搭、造型、設定與穿著紀錄。可帶到別的裝置匯入；亦可上傳到雲端備份。
+            <strong className="text-walnut-700">完全離線、不上傳任何伺服器</strong>。
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={handleExport}
+              disabled={backupBusy !== null}
+              className="bg-walnut-700 hover:bg-walnut-800 disabled:bg-stone-300 text-cream-50 px-4 py-2 rounded-lg text-sm"
+            >
+              {backupBusy === 'export' ? '匯出中…' : '⬇ 匯出 ZIP'}
+            </button>
+            <label className={`bg-cream-100 hover:bg-cream-200 text-walnut-700 px-4 py-2 rounded-lg text-sm cursor-pointer ${backupBusy ? 'opacity-50 pointer-events-none' : ''}`}>
+              {backupBusy === 'import' ? '匯入中…' : '⬆ 匯入 ZIP（會覆蓋）'}
+              <input type="file" accept=".zip,application/zip" onChange={handleImport} className="hidden" />
+            </label>
+          </div>
+          {backupMsg && <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded p-2">{backupMsg}</p>}
         </div>
       </section>
 

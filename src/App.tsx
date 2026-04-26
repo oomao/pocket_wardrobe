@@ -8,6 +8,8 @@ import TryOnPage from './pages/TryOnPage';
 import AITryOnPage from './pages/AITryOnPage';
 import StyleComposerPage from './pages/StyleComposerPage';
 import LibraryPage from './pages/LibraryPage';
+import InsightsPage from './pages/InsightsPage';
+import ShufflePage from './pages/ShufflePage';
 import SettingsPage from './pages/SettingsPage';
 
 export default function App() {
@@ -25,6 +27,8 @@ export default function App() {
             <Route path="style" element={<StyleComposerPage />} />
             <Route path="style/:styleId" element={<StyleComposerPage />} />
             <Route path="library" element={<LibraryPage />} />
+            <Route path="insights" element={<InsightsPage />} />
+            <Route path="shuffle" element={<ShufflePage />} />
             {/* legacy routes redirect to the unified library */}
             <Route path="outfits" element={<Navigate to="/library" replace />} />
             <Route path="styles" element={<Navigate to="/library" replace />} />

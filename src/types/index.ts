@@ -156,6 +156,19 @@ export interface StyleItem {
   zIndex: number;
 }
 
+// Per-day wear log — feeds the calendar view and statistics. Created
+// automatically whenever an outfit / style is saved, can also be added
+// manually from the calendar.
+export interface WearLog {
+  id: string;
+  date: string;          // YYYY-MM-DD (local date, not UTC)
+  clotheIds: string[];   // garments worn
+  outfitId?: string;
+  styleId?: string;
+  note?: string;
+  createdAt: number;
+}
+
 export interface Style {
   id: string;
   name: string;
