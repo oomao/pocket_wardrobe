@@ -91,12 +91,12 @@ export const HF_SPACE_PRESETS: HFSpacePreset[] = [
   },
 ];
 
-// Default Space — Qwen-Image-Edit purpose-built try-on space.
-// Qwen-Image-2.0 (Alibaba, 2026) outperformed Gemini-2.5-Flash-Image-Preview
-// in blind tests and matched Gemini-3-Pro-Image-Preview on edit tasks.
+// Default Space — Kolors-VTON has the most stable public API of the
+// try-on family and a well-known endpoint name. Users can switch via the
+// model picker to Qwen / FLUX / etc. for higher quality.
 export const DEFAULT_CONFIG: AITryOnConfig = {
-  spaceId: 'JamesDigitalOcean/Qwen_Image_Edit_Try_On_Clothes',
-  endpoint: '/predict',
+  spaceId: 'Kwai-Kolors/Kolors-Virtual-Try-On',
+  endpoint: '/tryon',
 };
 
 // Fallback chain — if the user's chosen Space can't be resolved (sleeping
@@ -170,7 +170,7 @@ export interface RunResult {
 
 function isResolveError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
-  return /could not resolve app|unable to fetch app config|space (?:is sleeping|not found)/i.test(msg);
+  return /could not resolve app|unable to fetch app config|space (?:is sleeping|not found)|destructure property ['"]?config['"]?/i.test(msg);
 }
 
 function connectWithTimeout(

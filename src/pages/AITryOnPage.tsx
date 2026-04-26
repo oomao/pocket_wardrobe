@@ -270,14 +270,38 @@ export default function AITryOnPage() {
         </div>
       )}
 
-      {/* HF Settings modal — preset list + advanced custom */}
+      {/* HF Settings modal — preset list + HF token + advanced custom */}
       {showSettings && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="wood-card max-w-xl w-full p-5 space-y-4 bg-white max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-bold text-walnut-700">⚙️ 選擇 AI 模型</h3>
+            <h3 className="text-lg font-bold text-walnut-700">⚙️ AI 模型設定</h3>
+
+            {/* HF Token field — most users need this in 2026 */}
+            <section className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <p className="text-xs font-semibold text-amber-900 mb-1">
+                🔑 HuggingFace Token（強烈建議）
+              </p>
+              <p className="text-[11px] text-amber-800 mb-2 leading-relaxed">
+                2026 起多數 Space 要求登入才有 GPU 額度，匿名呼叫會收到「Cannot destructure 'config'」錯誤。
+                到 <a className="underline" href="https://huggingface.co/settings/tokens" target="_blank" rel="noreferrer">huggingface.co/settings/tokens</a>
+                {' '}建立一個 read 權限的免費 token，貼到下方即可。
+              </p>
+              <input
+                type="password"
+                value={hfConfig.hfToken || ''}
+                onChange={(e) => setHfConfig({ ...hfConfig, hfToken: e.target.value })}
+                onBlur={() => saveAIConfig(hfConfig)}
+                className="w-full border border-amber-200 rounded px-2 py-1.5 text-xs font-mono bg-white"
+                placeholder="hf_..."
+                spellCheck={false}
+              />
+              <p className="text-[10px] text-stone-500 mt-1">
+                Token 只儲存在你的瀏覽器 localStorage，不會上傳到任何伺服器（除了 HuggingFace 本身）。
+              </p>
+            </section>
+
             <p className="text-xs text-stone-500">
-              點擊下方任一模型即套用。所有都是公共 HuggingFace Space，永久免費。
-              第一次使用該 Space 時可能要等 30–60 秒喚醒。
+              點擊下方任一模型即套用。第一次使用該 Space 時可能要等 30–60 秒喚醒。
             </p>
 
             <div className="grid grid-cols-1 gap-2">
