@@ -13,7 +13,7 @@ declare global {
   }
 }
 
-const PROMPT = [
+export const DEFAULT_CLEANUP_PROMPT = [
   'Re-render this clothing item as a clean e-commerce product photo on a pure white background.',
   'Preserve the EXACT original colors, fabric texture, prints, patterns, hardware and design details.',
   'Remove all shadows, wrinkles, hangers, mannequins, hands, and any background colour bleed on the edges.',
@@ -21,9 +21,12 @@ const PROMPT = [
   'No text, no watermark, no extra props.',
 ].join(' ');
 
+const PROMPT = DEFAULT_CLEANUP_PROMPT;
+
 export async function aiCleanupViaPuter(
   dataUrl: string,
   onStatus?: (msg: string) => void,
+  promptOverride?: string,
 ): Promise<string> {
   const w = window;
   if (!w.puter) throw new Error('Puter.js 還沒載入完成，請稍候再試。');
@@ -33,10 +36,11 @@ export async function aiCleanupViaPuter(
   const base64 = m[2];
 
   onStatus?.('呼叫 Nano Banana…（首次使用需登入 Puter，僅一次）');
+  const promptText = (promptOverride && promptOverride.trim()) || PROMPT;
   // Puter API change (2026): must pass provider, and the 2.5 preview model was
   // deprecated in favour of gemini-3.1-flash-image-preview. The previous shape
   // produces 'could not resolve app config' on newer Puter builds.
-  const result = await w.puter.ai.txt2img(PROMPT, {
+  const result = await w.puter.ai.txt2img(promptText, {
     provider: 'gemini',
     model: 'gemini-3.1-flash-image-preview',
     input_image: base64,
@@ -67,11 +71,15 @@ export async function aiCleanupViaPuter(
   return cnv.toDataURL('image/png');
 }
 
-// HF Space cleanup via gradio_client. Tries several common parameter
-// shapes since each Space has its own input convention.
+// HF Space cleanup via gradio_client. Each preset can declare its own
+// payload builder so we don't have to brute-force parameter names.
 export interface HFCleanupPreset {
   spaceId: string;
   endpoint: string;
+  /** If provided, called with the garment file to build the predict payload.
+   *  Only used by Spaces that need extra params (e.g. try-on Spaces being
+   *  repurposed for single-image cleanup). */
+  buildPayload?: (garment: any) => Record<string, any>;
 }
 
 export const CLEANUP_PRESETS: Array<{
@@ -81,11 +89,50 @@ export const CLEANUP_PRESETS: Array<{
   preset: HFCleanupPreset;
   /** ZeroGPU spaces require an HF read token in 2026. */
   needsToken?: boolean;
+  /** Marks repurposed try-on Spaces — output quality may vary. */
+  experimental?: boolean;
 }> = [
+  {
+    id: 'ootd',
+    label: 'OOTDiffusion (匿名可用)',
+    description: '原為 try-on 模型，匿名 2.3 秒喚醒可用。cleanup 用法把衣物同時當 person 和 garment 送，效果視衣物而定（實驗性）。',
+    preset: {
+      spaceId: 'levihsu/OOTDiffusion',
+      endpoint: '/process_hd',
+      buildPayload: (garment) => ({
+        vton_img: garment,
+        garm_img: garment,
+        n_samples: 1,
+        n_steps: 20,
+        image_scale: 2,
+        seed: -1,
+      }),
+    },
+    experimental: true,
+  },
+  {
+    id: 'idm-vton',
+    label: 'IDM-VTON (匿名可用)',
+    description: '原為 try-on 模型，匿名可用。cleanup 用法把衣物同時當 person 和 garment（實驗性）。',
+    preset: {
+      spaceId: 'yisol/IDM-VTON',
+      endpoint: '/tryon',
+      buildPayload: (garment) => ({
+        dict: { background: garment, layers: [], composite: null },
+        garm_img: garment,
+        garment_des: 'a clean studio product photo of this garment',
+        is_checked: true,
+        is_checked_crop: false,
+        denoise_steps: 20,
+        seed: 42,
+      }),
+    },
+    experimental: true,
+  },
   {
     id: 'qwen-edit',
     label: 'Qwen-Image-Edit 2511',
-    description: '阿里官方通用編輯模型，盲測勝過 Gemini 2.5 Flash。需 HF Token（ZeroGPU）。',
+    description: '阿里官方通用編輯模型，盲測勝過 Gemini 2.5 Flash。需 HF Token（ZeroGPU）。最適合 cleanup 任務。',
     preset: { spaceId: 'Qwen/Qwen-Image-Edit-2511', endpoint: '/predict' },
     needsToken: true,
   },
@@ -103,6 +150,7 @@ export async function aiCleanupViaHFSpace(
   preset: HFCleanupPreset,
   onStatus?: (msg: string) => void,
   hfToken?: string,
+  promptOverride?: string,
 ): Promise<string> {
   onStatus?.(`連接 ${preset.spaceId}…`);
   const client = await Promise.race([
@@ -129,12 +177,15 @@ export async function aiCleanupViaHFSpace(
   const file = handle_file(blob);
 
   onStatus?.('AI 推論中（Space 在睡眠時首次喚醒約 30–60 秒）…');
-  const attempts: Array<() => Promise<unknown>> = [
-    () => client.predict(preset.endpoint, { input_image: file, prompt: PROMPT }),
-    () => client.predict(preset.endpoint, { image: file, prompt: PROMPT }),
-    () => client.predict(preset.endpoint, [file, PROMPT]),
-    () => client.predict(preset.endpoint, [PROMPT, file]),
-  ];
+  const promptText = (promptOverride && promptOverride.trim()) || PROMPT;
+  const attempts: Array<() => Promise<unknown>> = preset.buildPayload
+    ? [() => client.predict(preset.endpoint, preset.buildPayload!(file))]
+    : [
+        () => client.predict(preset.endpoint, { input_image: file, prompt: promptText }),
+        () => client.predict(preset.endpoint, { image: file, prompt: promptText }),
+        () => client.predict(preset.endpoint, [file, promptText]),
+        () => client.predict(preset.endpoint, [promptText, file]),
+      ];
 
   let lastErr: unknown = null;
   for (const attempt of attempts) {

@@ -11,6 +11,7 @@ import { saveClothing } from '../services/storage';
 import { EditorCanvas } from '../services/editorCanvas';
 import {
   CLEANUP_PRESETS,
+  DEFAULT_CLEANUP_PROMPT,
   aiCleanupCanvas,
   aiCleanupViaHFSpace,
   aiCleanupViaPuter,
@@ -176,6 +177,10 @@ export default function AddClothingPage() {
   const [bgRemoved, setBgRemoved] = useState(false);
   const [bgBusy, setBgBusy] = useState(false);
   const [cleanupBusy, setCleanupBusy] = useState<null | string>(null);
+  // Default to Puter — most reliable at producing an actual cleaned image
+  // out-of-box (when Puter quota isn't exhausted). OOT/IDM are listed first
+  // in the picker for users who want anonymous-only and are willing to
+  // experiment, but we don't make them the default.
   const [cleanupModelId, setCleanupModelId] = useState<string>(
     () => localStorage.getItem('pw_cleanup_model') || 'puter',
   );
@@ -183,6 +188,12 @@ export default function AddClothingPage() {
     localStorage.setItem('pw_cleanup_model', cleanupModelId);
   }, [cleanupModelId]);
   const [showCleanupPicker, setShowCleanupPicker] = useState(false);
+  const [cleanupPrompt, setCleanupPrompt] = useState<string>(
+    () => localStorage.getItem('pw_cleanup_prompt') || DEFAULT_CLEANUP_PROMPT,
+  );
+  useEffect(() => {
+    localStorage.setItem('pw_cleanup_prompt', cleanupPrompt);
+  }, [cleanupPrompt]);
 
   type CleanupOption = {
     id: string;
@@ -190,18 +201,28 @@ export default function AddClothingPage() {
     icon: string;
     description: string;
     needsToken?: boolean;
+    experimental?: boolean;
   };
+  // Order: anonymous-OK first (experimental but free + zero-setup),
+  // then Puter (free with daily quota), then ZeroGPU options needing token.
   const cleanupOptions: CleanupOption[] = [
+    ...CLEANUP_PRESETS.filter((p) => p.experimental).map((p) => ({
+      id: p.id,
+      label: p.label,
+      icon: '🧪',
+      description: p.description,
+      experimental: p.experimental,
+    })),
     {
       id: 'puter',
       label: 'Google Nano Banana (Puter)',
       icon: '🍌',
       description: 'Puter 代理 Gemini 影像模型。免費但每日有限額（10–20 次後 rate-limit）。首次需登入 Puter 帳號。',
     },
-    ...CLEANUP_PRESETS.map((p) => ({
+    ...CLEANUP_PRESETS.filter((p) => p.needsToken).map((p) => ({
       id: p.id,
       label: p.label,
-      icon: p.needsToken ? '🔒' : '🤗',
+      icon: '🔒',
       description: p.description,
       needsToken: p.needsToken,
     })),
@@ -295,7 +316,7 @@ export default function AddClothingPage() {
       if (kind === 'canvas') {
         next = await aiCleanupCanvas(current);
       } else if (kind === 'puter') {
-        next = await aiCleanupViaPuter(current, (m) => setStatusMsg(m));
+        next = await aiCleanupViaPuter(current, (m) => setStatusMsg(m), cleanupPrompt);
         isAI = true;
       } else {
         // HF Space preset id — reuse the same HF token the AI 試穿頁存了
@@ -312,6 +333,7 @@ export default function AddClothingPage() {
           preset.preset,
           (m) => setStatusMsg(m),
           hfToken,
+          cleanupPrompt,
         );
         isAI = true;
       }
@@ -772,6 +794,11 @@ export default function AddClothingPage() {
                         </p>
                         <p className="text-[11px] text-stone-500 mt-1 leading-relaxed">{o.description}</p>
                       </div>
+                      {o.experimental && (
+                        <span className="shrink-0 text-[10px] bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full">
+                          匿名 / 實驗性
+                        </span>
+                      )}
                       {o.needsToken && (
                         <span className="shrink-0 text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
                           需 Token
@@ -784,10 +811,32 @@ export default function AddClothingPage() {
             </div>
 
             <p className="text-[11px] text-stone-500 leading-relaxed">
-              💡 標 🔒 的模型需要 HuggingFace Token（在「✨ AI 試穿」頁面右上 ⚙️ 模型 chip 設定一次即可，兩處共用）。
-              標 🍌 的 Puter 模型每日有額度但不用 token。
-              不想設定的話用「🎨 本機調色」按鈕（瞬間完成、輕度色偏）。
+              💡 標 🧪 的兩個 try-on 模型匿名可用、無須 token，但我們把它們「拿去 cleanup 用」是非典型用法（把衣物同時當 person + garment 送），效果視衣物而定。
+              標 🔒 的需 HF Token（兩處共用，於 AI 試穿頁面設定）。
+              不想設定的話用「🎨 本機調色」按鈕。
             </p>
+
+            <details>
+              <summary className="text-xs text-stone-500 cursor-pointer">✏️ 自訂 prompt（進階，僅 Puter / Qwen / FLUX 採用）</summary>
+              <div className="mt-2 space-y-2">
+                <p className="text-[10px] text-stone-500">
+                  OOT / IDM 是 try-on 模型沒有 prompt 入口（送出時忽略此欄位）。
+                  Puter / Qwen / FLUX 才會用這個 prompt 來重繪你的衣物。
+                </p>
+                <textarea
+                  value={cleanupPrompt}
+                  onChange={(e) => setCleanupPrompt(e.target.value)}
+                  rows={6}
+                  className="w-full border border-cream-200 rounded px-2 py-1.5 text-[11px] font-mono bg-white"
+                />
+                <button
+                  onClick={() => setCleanupPrompt(DEFAULT_CLEANUP_PROMPT)}
+                  className="text-[11px] text-walnut-700 underline"
+                >
+                  回復預設 prompt
+                </button>
+              </div>
+            </details>
           </div>
         </div>
       )}
