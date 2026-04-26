@@ -15,6 +15,7 @@ import {
   aiCleanupViaHFSpace,
   aiCleanupViaPuter,
 } from '../services/aiCleanup';
+import { loadAIConfig } from '../services/aiTryOn';
 import AnchorPicker from '../components/AnchorPicker';
 import {
   ANCHORS_USED_BY_CATEGORY,
@@ -268,10 +269,21 @@ export default function AddClothingPage() {
         next = await aiCleanupViaPuter(current, (m) => setStatusMsg(m));
         isAI = true;
       } else {
-        // HF Space preset id
+        // HF Space preset id — reuse the same HF token the AI 試穿頁存了
         const preset = CLEANUP_PRESETS.find((p) => p.id === kind);
         if (!preset) throw new Error(`未知的清理選項：${kind}`);
-        next = await aiCleanupViaHFSpace(current, preset.preset, (m) => setStatusMsg(m));
+        const hfToken = loadAIConfig().hfToken;
+        if (preset.needsToken && !hfToken) {
+          throw new Error(
+            `${preset.label} 需要 HuggingFace Token。請先到「✨ AI 試穿」頁面右上「⚙️ 模型」chip 貼上 token，再回來重試（同一個 token 兩個地方共用）。`,
+          );
+        }
+        next = await aiCleanupViaHFSpace(
+          current,
+          preset.preset,
+          (m) => setStatusMsg(m),
+          hfToken,
+        );
         isAI = true;
       }
 
@@ -455,7 +467,9 @@ export default function AddClothingPage() {
                         disabled={editorBusy}
                         className="w-full text-left px-3 py-2 hover:bg-cream-50 border-b border-cream-100"
                       >
-                        <p className="text-sm font-medium text-walnut-700">🤗 {p.label}</p>
+                        <p className="text-sm font-medium text-walnut-700">
+                          {p.needsToken ? '🔒' : '🤗'} {p.label}
+                        </p>
                         <p className="text-[11px] text-stone-500">{p.description}</p>
                       </button>
                     ))}

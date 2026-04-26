@@ -74,18 +74,27 @@ export interface HFCleanupPreset {
   endpoint: string;
 }
 
-export const CLEANUP_PRESETS: Array<{ id: string; label: string; description: string; preset: HFCleanupPreset }> = [
+export const CLEANUP_PRESETS: Array<{
+  id: string;
+  label: string;
+  description: string;
+  preset: HFCleanupPreset;
+  /** ZeroGPU spaces require an HF read token in 2026. */
+  needsToken?: boolean;
+}> = [
   {
     id: 'qwen-edit',
-    label: 'Qwen-Image-Edit',
-    description: '阿里巴巴官方通用編輯模型，盲測勝過 Gemini 2.5 Flash。完全免費。',
+    label: 'Qwen-Image-Edit 2511',
+    description: '阿里官方通用編輯模型，盲測勝過 Gemini 2.5 Flash。需 HF Token（ZeroGPU）。',
     preset: { spaceId: 'Qwen/Qwen-Image-Edit-2511', endpoint: '/predict' },
+    needsToken: true,
   },
   {
     id: 'flux-kontext',
     label: 'FLUX.1 Kontext-Dev',
-    description: 'Black Forest Labs 通用編輯。社群微調最多。完全免費。',
+    description: 'Black Forest Labs 通用編輯。需 HF Token（ZeroGPU）。',
     preset: { spaceId: 'black-forest-labs/FLUX.1-Kontext-Dev', endpoint: '/predict' },
+    needsToken: true,
   },
 ];
 
