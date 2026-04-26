@@ -9,7 +9,12 @@ import {
 } from '../services/imageProcessing';
 import { saveClothing } from '../services/storage';
 import { EditorCanvas } from '../services/editorCanvas';
-import { aiCleanupCanvas, aiCleanupViaPuter } from '../services/aiCleanup';
+import {
+  CLEANUP_PRESETS,
+  aiCleanupCanvas,
+  aiCleanupViaHFSpace,
+  aiCleanupViaPuter,
+} from '../services/aiCleanup';
 import AnchorPicker from '../components/AnchorPicker';
 import {
   ANCHORS_USED_BY_CATEGORY,
@@ -169,7 +174,8 @@ export default function AddClothingPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [bgRemoved, setBgRemoved] = useState(false);
   const [bgBusy, setBgBusy] = useState(false);
-  const [cleanupBusy, setCleanupBusy] = useState<null | 'puter' | 'canvas'>(null);
+  const [cleanupBusy, setCleanupBusy] = useState<null | string>(null);
+  const [cleanupMenuOpen, setCleanupMenuOpen] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
 
   // anchors
@@ -245,20 +251,31 @@ export default function AddClothingPage() {
     }
   };
 
-  const runCleanup = async (kind: 'puter' | 'canvas') => {
+  const runCleanup = async (kind: string) => {
     const ed = editorRef.current;
     if (!ed) return;
     setCleanupBusy(kind);
+    setCleanupMenuOpen(false);
     setStatusMsg(null);
     setErrorMsg(null);
     try {
       const current = ed.exportDataURL();
-      let next =
-        kind === 'puter'
-          ? await aiCleanupViaPuter(current, (m) => setStatusMsg(m))
-          : await aiCleanupCanvas(current);
+      let next: string;
+      let isAI = false;
+      if (kind === 'canvas') {
+        next = await aiCleanupCanvas(current);
+      } else if (kind === 'puter') {
+        next = await aiCleanupViaPuter(current, (m) => setStatusMsg(m));
+        isAI = true;
+      } else {
+        // HF Space preset id
+        const preset = CLEANUP_PRESETS.find((p) => p.id === kind);
+        if (!preset) throw new Error(`未知的清理選項：${kind}`);
+        next = await aiCleanupViaHFSpace(current, preset.preset, (m) => setStatusMsg(m));
+        isAI = true;
+      }
 
-      if (kind === 'puter') {
+      if (isAI) {
         setStatusMsg('AI 完成，重新去背中…');
         const blob = await fetch(next).then((r) => r.blob());
         const cleaned = await removeBackground(blob);
@@ -268,7 +285,7 @@ export default function AddClothingPage() {
       }
       await ed.replaceImage(next);
       setCanUndo(false);
-      setStatusMsg(kind === 'puter' ? 'AI 還原完成 ✅' : '自動調色完成 ✅');
+      setStatusMsg(isAI ? 'AI 還原完成 ✅' : '自動調色完成 ✅');
     } catch (err: any) {
       console.error(err);
       setErrorMsg(`處理失敗：${err?.message || String(err)}`);
@@ -404,25 +421,56 @@ export default function AddClothingPage() {
               className={`px-3 py-1.5 rounded text-xs disabled:opacity-50 ${
                 bgRemoved ? 'bg-emerald-100 text-emerald-700' : 'bg-walnut-700 text-cream-50 hover:bg-walnut-800'
               }`}
-              title="呼叫 imgly 去背模型（首次 ~24MB）。儲存到衣櫥前建議至少做一次。"
+              title="呼叫 imgly 去背模型（首次 ~24MB）。"
             >
               {bgBusy ? '處理中…' : bgRemoved ? '✓ 已去背' : '🪄 AI 去背'}
             </button>
-            <button
-              onClick={() => runCleanup('puter')}
-              disabled={editorBusy}
-              className="px-3 py-1.5 rounded bg-walnut-700 hover:bg-walnut-800 text-cream-50 text-xs disabled:opacity-50"
-              title="呼叫 Google Nano Banana 重繪商品圖。會自動再去背一次。首次需登入 Puter（免費）。"
-            >
-              {cleanupBusy === 'puter' ? '處理中…' : '✨ AI 還原原色'}
-            </button>
+
+            {/* AI cleanup dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setCleanupMenuOpen((s) => !s)}
+                disabled={editorBusy}
+                className="px-3 py-1.5 rounded bg-walnut-700 hover:bg-walnut-800 text-cream-50 text-xs disabled:opacity-50 inline-flex items-center gap-1"
+              >
+                {cleanupBusy && cleanupBusy !== 'canvas' ? '處理中…' : '✨ AI 還原原色'}
+                <span className="text-[10px]">▾</span>
+              </button>
+              {cleanupMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-30" onClick={() => setCleanupMenuOpen(false)} />
+                  <div className="absolute z-40 mt-1 w-72 bg-white rounded-lg border border-cream-200 shadow-lg overflow-hidden">
+                    <button
+                      onClick={() => runCleanup('puter')}
+                      disabled={editorBusy}
+                      className="w-full text-left px-3 py-2 hover:bg-cream-50 border-b border-cream-100"
+                    >
+                      <p className="text-sm font-medium text-walnut-700">🍌 Google Nano Banana</p>
+                      <p className="text-[11px] text-stone-500">Puter 代理 Gemini，需登入 Puter（每日有額度）</p>
+                    </button>
+                    {CLEANUP_PRESETS.map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => runCleanup(p.id)}
+                        disabled={editorBusy}
+                        className="w-full text-left px-3 py-2 hover:bg-cream-50 border-b border-cream-100"
+                      >
+                        <p className="text-sm font-medium text-walnut-700">🤗 {p.label}</p>
+                        <p className="text-[11px] text-stone-500">{p.description}</p>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
             <button
               onClick={() => runCleanup('canvas')}
               disabled={editorBusy}
               className="px-3 py-1.5 rounded bg-white border border-cream-200 hover:border-brand-400 text-xs disabled:opacity-50"
               title="本機微調白平衡 + 對比 / 飽和度。瞬間完成。"
             >
-              {cleanupBusy === 'canvas' ? '處理中…' : '🎨 自動調色（本機）'}
+              {cleanupBusy === 'canvas' ? '處理中…' : '🎨 本機調色'}
             </button>
             {statusMsg && <span className="text-xs text-emerald-600">{statusMsg}</span>}
           </div>

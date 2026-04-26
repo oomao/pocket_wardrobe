@@ -1,10 +1,11 @@
-// Two cleanup paths for clothing photos so the saved image better
-// represents the actual garment style:
-//   - aiCleanupViaPuter:  free Google Nano Banana via Puter.js (best quality,
-//                         requires the user to sign in to Puter once).
-//   - aiCleanupCanvas:    pure browser canvas (gray-world WB + slight
-//                         contrast/saturation boost). Instant, no sign-in,
-//                         only fixes mild colour casts.
+// Cleanup paths for clothing photos so the saved image better represents
+// the actual garment style. Multiple providers supported so the user can
+// pick whichever is currently working / has free quota:
+//   - aiCleanupViaPuter:    Google Nano Banana via Puter (rate-limited)
+//   - aiCleanupViaHFSpace:  Qwen / FLUX / others on HuggingFace Spaces
+//   - aiCleanupCanvas:      pure browser canvas (gentle WB + contrast)
+
+import { Client, handle_file } from '@gradio/client';
 
 declare global {
   interface Window {
@@ -64,6 +65,84 @@ export async function aiCleanupViaPuter(
   if (!ctx) throw new Error('無法建立 canvas context。');
   ctx.drawImage(imgEl, 0, 0);
   return cnv.toDataURL('image/png');
+}
+
+// HF Space cleanup via gradio_client. Tries several common parameter
+// shapes since each Space has its own input convention.
+export interface HFCleanupPreset {
+  spaceId: string;
+  endpoint: string;
+}
+
+export const CLEANUP_PRESETS: Array<{ id: string; label: string; description: string; preset: HFCleanupPreset }> = [
+  {
+    id: 'qwen-edit',
+    label: 'Qwen-Image-Edit',
+    description: '阿里巴巴官方通用編輯模型，盲測勝過 Gemini 2.5 Flash。完全免費。',
+    preset: { spaceId: 'Qwen/Qwen-Image-Edit-2511', endpoint: '/predict' },
+  },
+  {
+    id: 'flux-kontext',
+    label: 'FLUX.1 Kontext-Dev',
+    description: 'Black Forest Labs 通用編輯。社群微調最多。完全免費。',
+    preset: { spaceId: 'black-forest-labs/FLUX.1-Kontext-Dev', endpoint: '/predict' },
+  },
+];
+
+export async function aiCleanupViaHFSpace(
+  dataUrl: string,
+  preset: HFCleanupPreset,
+  onStatus?: (msg: string) => void,
+): Promise<string> {
+  onStatus?.(`連接 ${preset.spaceId}…`);
+  const client = await Client.connect(preset.spaceId);
+  const blob = await fetch(dataUrl).then((r) => r.blob());
+  const file = handle_file(blob);
+
+  onStatus?.('AI 推論中（Space 在睡眠時首次喚醒約 30–60 秒）…');
+  const attempts: Array<() => Promise<unknown>> = [
+    () => client.predict(preset.endpoint, { input_image: file, prompt: PROMPT }),
+    () => client.predict(preset.endpoint, { image: file, prompt: PROMPT }),
+    () => client.predict(preset.endpoint, [file, PROMPT]),
+    () => client.predict(preset.endpoint, [PROMPT, file]),
+  ];
+
+  let lastErr: unknown = null;
+  for (const attempt of attempts) {
+    try {
+      const result = await attempt();
+      const url = pickImageUrl((result as any).data ?? result);
+      if (url) return url;
+      lastErr = new Error('Space 回傳格式無法解析');
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr ?? new Error('所有參數組合都失敗');
+}
+
+function pickImageUrl(data: unknown): string | null {
+  const visit = (v: any): string | null => {
+    if (!v) return null;
+    if (typeof v === 'string' && (v.startsWith('http') || v.startsWith('data:'))) return v;
+    if (typeof v === 'object') {
+      if (typeof v.url === 'string') return v.url;
+      if (typeof v.path === 'string') return v.path;
+      if (typeof v.value === 'string') return v.value;
+      if (Array.isArray(v)) {
+        for (const it of v) {
+          const r = visit(it);
+          if (r) return r;
+        }
+      }
+      for (const k of Object.keys(v)) {
+        const r = visit(v[k]);
+        if (r) return r;
+      }
+    }
+    return null;
+  };
+  return visit(data);
 }
 
 // Pure-canvas gentle enhance. Earlier versions used gray-world auto white

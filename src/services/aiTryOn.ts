@@ -21,6 +21,76 @@ export interface RunOptions extends AITryOnConfig {
   onStatus?: (stage: ProgressStage, message: string) => void;
 }
 
+// Curated list of public HF Spaces the user can pick from. Ordered by
+// quality / suitability so the first item is the recommended default.
+export interface HFSpacePreset {
+  id: string;
+  label: string;
+  description: string;
+  spaceId: string;
+  endpoint: string;
+  badge?: '推薦' | '快' | '通用' | '經典';
+}
+
+export const HF_SPACE_PRESETS: HFSpacePreset[] = [
+  {
+    id: 'qwen-tryon',
+    label: 'Qwen 試穿衣服 (專版)',
+    description: 'Qwen-Image-Edit 社群微調，專為服飾試穿任務。盲測效果勝過 Gemini 2.5 Flash Image。',
+    spaceId: 'JamesDigitalOcean/Qwen_Image_Edit_Try_On_Clothes',
+    endpoint: '/predict',
+    badge: '推薦',
+  },
+  {
+    id: 'qwen-edit',
+    label: 'Qwen-Image-Edit 2511',
+    description: '阿里巴巴官方通用圖像編輯模型 (2026)，多模態強，靠 prompt 控制。',
+    spaceId: 'Qwen/Qwen-Image-Edit-2511',
+    endpoint: '/predict',
+    badge: '通用',
+  },
+  {
+    id: 'flux-kontext',
+    label: 'FLUX.1 Kontext-Dev',
+    description: 'Black Forest Labs 通用圖像編輯 SOTA，社群微調最多。',
+    spaceId: 'black-forest-labs/FLUX.1-Kontext-Dev',
+    endpoint: '/predict',
+    badge: '通用',
+  },
+  {
+    id: 'kolors',
+    label: 'Kolors-VTON',
+    description: '快手 Kuaishou 專用虛擬試穿模型，速度快。',
+    spaceId: 'Kwai-Kolors/Kolors-Virtual-Try-On',
+    endpoint: '/tryon',
+    badge: '快',
+  },
+  {
+    id: 'catvton',
+    label: 'CatVTON',
+    description: 'ICLR 2025 輕量試穿，參數 ~899M，記憶體佔用小。',
+    spaceId: 'zhengchong/CatVTON',
+    endpoint: '/process',
+    badge: '經典',
+  },
+  {
+    id: 'idm-vton',
+    label: 'IDM-VTON',
+    description: '經典 SOTA，模組化架構，文件齊全。',
+    spaceId: 'yisol/IDM-VTON',
+    endpoint: '/predict',
+    badge: '經典',
+  },
+  {
+    id: 'ootd',
+    label: 'OOTDiffusion',
+    description: 'AAAI 2024，社群 6.3k stars。穩定的 baseline。',
+    spaceId: 'levihsu/OOTDiffusion',
+    endpoint: '/predict',
+    badge: '經典',
+  },
+];
+
 // Default Space — Qwen-Image-Edit purpose-built try-on space.
 // Qwen-Image-2.0 (Alibaba, 2026) outperformed Gemini-2.5-Flash-Image-Preview
 // in blind tests and matched Gemini-3-Pro-Image-Preview on edit tasks.

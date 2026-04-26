@@ -6,6 +6,7 @@ import { getAllClothing } from '../services/storage';
 import {
   AITryOnConfig,
   DEFAULT_CONFIG,
+  HF_SPACE_PRESETS,
   ProgressStage,
   loadAIConfig,
   runVirtualTryOn,
@@ -107,9 +108,9 @@ export default function AITryOnPage() {
         {provider === 'hf' && (
           <button
             onClick={() => setShowSettings(true)}
-            className="text-xs text-stone-500 underline"
+            className="text-xs bg-cream-100 text-walnut-700 px-3 py-1 rounded-full"
           >
-            ⚙️ HF Space 設定
+            🤗 模型：{HF_SPACE_PRESETS.find((p) => p.spaceId === hfConfig.spaceId)?.label || '自訂'} ▾
           </button>
         )}
       </div>
@@ -268,47 +269,103 @@ export default function AITryOnPage() {
         </div>
       )}
 
-      {/* HF Settings modal */}
+      {/* HF Settings modal — preset list + advanced custom */}
       {showSettings && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="wood-card max-w-lg w-full p-5 space-y-4 bg-white">
-            <h3 className="text-lg font-bold text-walnut-700">⚙️ HF Space 設定</h3>
-            <label className="block text-sm">
-              Space ID
-              <input
-                value={hfConfig.spaceId}
-                onChange={(e) => setHfConfig({ ...hfConfig, spaceId: e.target.value })}
-                className="w-full mt-1 border border-cream-200 rounded px-2 py-1.5 text-sm font-mono"
-                placeholder="user/space-name"
-              />
-              <span className="text-[11px] text-stone-500 block mt-1">
-                範例：Kwai-Kolors/Kolors-Virtual-Try-On、zhengchong/CatVTON
-              </span>
-            </label>
-            <label className="block text-sm">
-              Endpoint
-              <input
-                value={hfConfig.endpoint || ''}
-                onChange={(e) => setHfConfig({ ...hfConfig, endpoint: e.target.value })}
-                className="w-full mt-1 border border-cream-200 rounded px-2 py-1.5 text-sm font-mono"
-                placeholder="/tryon"
-              />
-            </label>
-            <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setHfConfig(DEFAULT_CONFIG)} className="px-3 py-1.5 rounded bg-cream-100 text-walnut-700 text-sm">
-                回復預設
-              </button>
-              <button onClick={() => setShowSettings(false)} className="px-3 py-1.5 rounded bg-cream-100 text-walnut-700 text-sm">
-                取消
-              </button>
+          <div className="wood-card max-w-xl w-full p-5 space-y-4 bg-white max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-bold text-walnut-700">⚙️ 選擇 AI 模型</h3>
+            <p className="text-xs text-stone-500">
+              點擊下方任一模型即套用。所有都是公共 HuggingFace Space，永久免費。
+              第一次使用該 Space 時可能要等 30–60 秒喚醒。
+            </p>
+
+            <div className="grid grid-cols-1 gap-2">
+              {HF_SPACE_PRESETS.map((p) => {
+                const isSelected = hfConfig.spaceId === p.spaceId && hfConfig.endpoint === p.endpoint;
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => {
+                      const next = { ...hfConfig, spaceId: p.spaceId, endpoint: p.endpoint };
+                      setHfConfig(next);
+                      saveAIConfig(next);
+                    }}
+                    className={`text-left p-3 rounded-lg border transition-all ${
+                      isSelected
+                        ? 'border-walnut-700 bg-cream-50 ring-2 ring-walnut-700/30'
+                        : 'border-cream-200 bg-white hover:border-brand-400'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm text-walnut-700 truncate">{p.label}</p>
+                        <p className="text-[11px] text-stone-500 mt-1 leading-relaxed">{p.description}</p>
+                        <p className="text-[10px] text-stone-400 mt-1 font-mono truncate">{p.spaceId}</p>
+                      </div>
+                      {p.badge && (
+                        <span className={`shrink-0 text-[10px] px-2 py-0.5 rounded-full ${
+                          p.badge === '推薦'
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : p.badge === '快'
+                            ? 'bg-sky-100 text-sky-700'
+                            : 'bg-cream-100 text-walnut-700'
+                        }`}>
+                          {p.badge}
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <details className="pt-2">
+              <summary className="text-xs text-stone-500 cursor-pointer">🛠 自訂 Space ID（進階）</summary>
+              <div className="mt-2 space-y-2">
+                <label className="block text-xs">
+                  Space ID
+                  <input
+                    value={hfConfig.spaceId}
+                    onChange={(e) => setHfConfig({ ...hfConfig, spaceId: e.target.value })}
+                    className="w-full mt-1 border border-cream-200 rounded px-2 py-1.5 text-xs font-mono"
+                    placeholder="user/space-name"
+                  />
+                </label>
+                <label className="block text-xs">
+                  Endpoint
+                  <input
+                    value={hfConfig.endpoint || ''}
+                    onChange={(e) => setHfConfig({ ...hfConfig, endpoint: e.target.value })}
+                    className="w-full mt-1 border border-cream-200 rounded px-2 py-1.5 text-xs font-mono"
+                    placeholder="/predict"
+                  />
+                </label>
+                <button
+                  onClick={() => {
+                    saveAIConfig(hfConfig);
+                  }}
+                  className="px-3 py-1.5 rounded bg-walnut-700 text-cream-50 text-xs"
+                >
+                  套用自訂
+                </button>
+              </div>
+            </details>
+
+            <div className="flex justify-between pt-2 border-t border-cream-100">
               <button
                 onClick={() => {
-                  saveAIConfig(hfConfig);
-                  setShowSettings(false);
+                  setHfConfig(DEFAULT_CONFIG);
+                  saveAIConfig(DEFAULT_CONFIG);
                 }}
+                className="px-3 py-1.5 rounded bg-cream-100 text-walnut-700 text-sm"
+              >
+                回復預設
+              </button>
+              <button
+                onClick={() => setShowSettings(false)}
                 className="px-3 py-1.5 rounded bg-walnut-700 text-cream-50 text-sm"
               >
-                儲存
+                完成
               </button>
             </div>
           </div>
