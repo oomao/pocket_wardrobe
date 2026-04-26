@@ -115,6 +115,32 @@ export interface Outfit {
   items: OutfitItem[];
 }
 
+// ─── Flat-lay Style (no mannequin / no body) ─────────────────────────────────
+// A "Style" is a free arrangement of wardrobe items on a canvas — like a
+// Pinterest Shuffles board or a magazine flatlay. Each item carries the same
+// transform fields as OutfitItem, plus the Style itself remembers the chosen
+// background and a thumbnail snapshot for the gallery.
+export interface StyleItem {
+  clotheId: string;
+  x: number;
+  y: number;
+  scaleX: number;
+  scaleY: number;
+  angle: number;
+  zIndex: number;
+}
+
+export interface Style {
+  id: string;
+  name: string;
+  createdAt: number;
+  backgroundId: string;
+  items: StyleItem[];
+  /** Data URL snapshot of the rendered canvas, used in the gallery card. */
+  thumbnail?: string;
+  description?: string;
+}
+
 export const DEFAULT_CATEGORIES: string[] = ['上衣', '下著', '外套', '連身', '鞋子', '配件'];
 
 export const BASE_HEIGHT_CM = 170;

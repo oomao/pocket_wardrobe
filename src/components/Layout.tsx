@@ -6,6 +6,7 @@ const navItems = [
   { to: '/add', label: '➕ 新增衣物' },
   { to: '/tryon', label: '🪞 試穿室' },
   { to: '/ai-tryon', label: '✨ AI 試穿' },
+  { to: '/styles', label: '🎨 造型收藏' },
   { to: '/outfits', label: '📓 穿搭日誌' },
   { to: '/settings', label: '⚙️ 設定' },
 ];

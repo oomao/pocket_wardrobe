@@ -3,6 +3,7 @@ import { v4 as uuid } from 'uuid';
 import {
   Clothing,
   Outfit,
+  Style,
   UserProfile,
   DEFAULT_CATEGORIES,
   DEFAULT_PROFILE,
@@ -12,6 +13,7 @@ const KEY_PROFILE = 'user_profile';
 const KEY_CATEGORIES = 'categories';
 const KEY_CLOTHES = 'clothes';
 const KEY_OUTFITS = 'outfits';
+const KEY_STYLES = 'styles';
 
 localforage.config({
   name: 'pocket_wardrobe',
@@ -59,6 +61,10 @@ export async function initDB(): Promise<void> {
   const outfits = await localforage.getItem<Outfit[]>(KEY_OUTFITS);
   if (!outfits) {
     await localforage.setItem(KEY_OUTFITS, []);
+  }
+  const styles = await localforage.getItem<Style[]>(KEY_STYLES);
+  if (!styles) {
+    await localforage.setItem(KEY_STYLES, []);
   }
 }
 
@@ -132,5 +138,46 @@ export async function deleteOutfit(id: string): Promise<boolean> {
   const all = await getAllOutfits();
   const next = all.filter((o) => o.id !== id);
   await localforage.setItem(KEY_OUTFITS, next);
+  return next.length !== all.length;
+}
+
+// ─── Styles (flat-lay) ───────────────────────────────────────────────────────
+
+export async function getAllStyles(): Promise<Style[]> {
+  return (await localforage.getItem<Style[]>(KEY_STYLES)) ?? [];
+}
+
+export async function getStyleById(id: string): Promise<Style | undefined> {
+  const all = await getAllStyles();
+  return all.find((s) => s.id === id);
+}
+
+export async function saveStyle(
+  data: Omit<Style, 'id' | 'createdAt'>,
+): Promise<Style> {
+  const all = await getAllStyles();
+  const item: Style = { ...data, id: uuid(), createdAt: Date.now() };
+  all.push(item);
+  await localforage.setItem(KEY_STYLES, all);
+  return item;
+}
+
+export async function updateStyle(
+  id: string,
+  patch: Partial<Omit<Style, 'id' | 'createdAt'>>,
+): Promise<Style | undefined> {
+  const all = await getAllStyles();
+  const idx = all.findIndex((s) => s.id === id);
+  if (idx === -1) return undefined;
+  const next: Style = { ...all[idx], ...patch };
+  all[idx] = next;
+  await localforage.setItem(KEY_STYLES, all);
+  return next;
+}
+
+export async function deleteStyle(id: string): Promise<boolean> {
+  const all = await getAllStyles();
+  const next = all.filter((s) => s.id !== id);
+  await localforage.setItem(KEY_STYLES, next);
   return next.length !== all.length;
 }

@@ -267,9 +267,28 @@ export class TryOnController {
         left = (tl.x + br.x) / 2;
         top = (tl.y + br.y) / 2;
       } else {
-        const targetMax = Math.min(cw, ch) * 0.4;
+        // No avatar (Style / flat-lay mode) — lay items out in vertical bands
+        // by category so a fresh canvas already looks like a paper-doll spread.
         const naturalMax = Math.max(img.width ?? 1, img.height ?? 1);
-        scaleX = scaleY = targetMax / naturalMax;
+        const sizeRatio: Record<string, number> = {
+          上衣: 0.36, 外套: 0.40, 連身: 0.50,
+          下著: 0.36, 鞋子: 0.22, 配件: 0.22,
+        };
+        const yRatio: Record<string, number> = {
+          上衣: 0.28, 外套: 0.28, 連身: 0.42,
+          下著: 0.55, 鞋子: 0.82, 配件: 0.82,
+        };
+        const sr = sizeRatio[clothing.category] ?? 0.32;
+        const yr = yRatio[clothing.category] ?? 0.5;
+        const target = Math.min(cw, ch) * sr;
+        scaleX = scaleY = target / naturalMax;
+        // Slight horizontal scatter so two items in the same band don't stack
+        const sameCategory = this.canvas
+          .getObjects()
+          .filter((o) => (o as any).clothingCategory === clothing.category).length;
+        const xOffset = (sameCategory % 3 - 1) * (cw * 0.18);
+        left = cw / 2 + xOffset;
+        top = ch * yr;
       }
     }
 

@@ -7,6 +7,8 @@ import TryOnPage from './pages/TryOnPage';
 import AITryOnPage from './pages/AITryOnPage';
 import OutfitsPage from './pages/OutfitsPage';
 import SettingsPage from './pages/SettingsPage';
+import StyleComposerPage from './pages/StyleComposerPage';
+import StylesGalleryPage from './pages/StylesGalleryPage';
 
 export default function App() {
   return (
@@ -19,6 +21,9 @@ export default function App() {
             <Route path="tryon" element={<TryOnPage />} />
             <Route path="tryon/:outfitId" element={<TryOnPage />} />
             <Route path="ai-tryon" element={<AITryOnPage />} />
+            <Route path="style" element={<StyleComposerPage />} />
+            <Route path="style/:styleId" element={<StyleComposerPage />} />
+            <Route path="styles" element={<StylesGalleryPage />} />
             <Route path="outfits" element={<OutfitsPage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
