@@ -1,6 +1,8 @@
 // Plain-canvas image editor that loads a transparent PNG and lets the user
-// erase pixels with destination-out compositing. Exports the result as a
-// data URL for storage.
+// erase pixels with destination-out compositing. Supports an undo stack of
+// snapshots and exports the result as a data URL for storage.
+
+const MAX_UNDO = 20;
 
 export class EditorCanvas {
   el: HTMLCanvasElement;
@@ -13,6 +15,8 @@ export class EditorCanvas {
   private lastX = 0;
   private lastY = 0;
   private detachers: Array<() => void> = [];
+  private undoStack: ImageData[] = [];
+  private onChange?: () => void;
 
   constructor(el: HTMLCanvasElement) {
     this.el = el;
@@ -21,7 +25,11 @@ export class EditorCanvas {
     this.ctx = ctx;
   }
 
-  async loadImage(src: string, maxSize = 600) {
+  setOnChange(fn: () => void) {
+    this.onChange = fn;
+  }
+
+  async loadImage(src: string, maxSize = 800) {
     const img = await loadImage(src);
     const ratio = Math.min(1, maxSize / Math.max(img.width, img.height));
     this.imgWidth = Math.round(img.width * ratio);
@@ -30,6 +38,8 @@ export class EditorCanvas {
     this.el.height = this.imgHeight;
     this.ctx.clearRect(0, 0, this.imgWidth, this.imgHeight);
     this.ctx.drawImage(img, 0, 0, this.imgWidth, this.imgHeight);
+    this.undoStack = [];
+    this.onChange?.();
   }
 
   setBrushSize(size: number) {
@@ -39,10 +49,16 @@ export class EditorCanvas {
   enableEraser(enable: boolean) {
     this.enabled = enable;
     this.detach();
+    this.el.style.cursor = enable ? 'crosshair' : 'default';
     if (!enable) return;
     const onDown = (e: PointerEvent) => this.onDown(e);
     const onMove = (e: PointerEvent) => this.onMove(e);
-    const onUp = () => (this.drawing = false);
+    const onUp = () => {
+      if (this.drawing) {
+        this.drawing = false;
+        this.onChange?.();
+      }
+    };
     this.el.addEventListener('pointerdown', onDown);
     this.el.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
@@ -60,7 +76,28 @@ export class EditorCanvas {
     return { x: (e.clientX - rect.left) * sx, y: (e.clientY - rect.top) * sy };
   }
 
+  private snapshot() {
+    if (this.imgWidth === 0) return;
+    const data = this.ctx.getImageData(0, 0, this.imgWidth, this.imgHeight);
+    this.undoStack.push(data);
+    if (this.undoStack.length > MAX_UNDO) this.undoStack.shift();
+  }
+
+  canUndo() {
+    return this.undoStack.length > 0;
+  }
+
+  undo(): boolean {
+    const last = this.undoStack.pop();
+    if (!last) return false;
+    this.ctx.putImageData(last, 0, 0);
+    this.onChange?.();
+    return true;
+  }
+
   private onDown(e: PointerEvent) {
+    e.preventDefault();
+    this.snapshot();
     this.drawing = true;
     const { x, y } = this.getPos(e);
     this.lastX = x;
@@ -70,6 +107,7 @@ export class EditorCanvas {
 
   private onMove(e: PointerEvent) {
     if (!this.drawing) return;
+    e.preventDefault();
     const { x, y } = this.getPos(e);
     this.eraseAt(this.lastX, this.lastY, x, y);
     this.lastX = x;
@@ -102,6 +140,7 @@ export class EditorCanvas {
 
   dispose() {
     this.detach();
+    this.undoStack = [];
   }
 }
 

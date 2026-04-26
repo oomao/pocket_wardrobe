@@ -11,8 +11,9 @@ import {
 import { TryOnController } from '../services/canvasController';
 import CategoryTabs from '../components/CategoryTabs';
 
-const ASPECT = 3 / 4; // width / height
-const MAX_W = 520;
+const ASPECT = 3 / 4;
+const MAX_W_DESKTOP = 520;
+const MAX_W_MOBILE = 400;
 
 export default function TryOnPage() {
   const { profile, categories } = useWardrobe();
@@ -26,18 +27,31 @@ export default function TryOnPage() {
   const [active, setActive] = useState('全部');
   const [hasSelection, setHasSelection] = useState(false);
   const [size, setSize] = useState({ w: 0, h: 0 });
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
-  // measure container width once mounted; observe resize
   useLayoutEffect(() => {
     if (!wrapperRef.current) return;
     const ro = new ResizeObserver((entries) => {
-      const cw = Math.min(MAX_W, entries[0].contentRect.width);
-      const w = Math.max(240, cw);
+      const containerW = entries[0].contentRect.width;
+      const isMobile = window.innerWidth < 1024;
+      const maxW = isMobile ? MAX_W_MOBILE : MAX_W_DESKTOP;
+      // height-bounded so canvas never exceeds 55vh
+      const heightCap = window.innerHeight * 0.55;
+      const widthFromHeight = heightCap * ASPECT;
+      const w = Math.max(240, Math.min(maxW, containerW, widthFromHeight));
       const h = Math.round(w / ASPECT);
       setSize((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
     });
     ro.observe(wrapperRef.current);
-    return () => ro.disconnect();
+    const onResize = () => {
+      if (wrapperRef.current) ro.unobserve(wrapperRef.current);
+      if (wrapperRef.current) ro.observe(wrapperRef.current);
+    };
+    window.addEventListener('resize', onResize);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', onResize);
+    };
   }, []);
 
   useEffect(() => {
@@ -72,6 +86,7 @@ export default function TryOnPage() {
   const addToCanvas = async (c: Clothing) => {
     await ctrlRef.current?.addClothing(c);
     setHasSelection(true);
+    setDrawerOpen(false);
   };
 
   const handleSave = async () => {
@@ -89,66 +104,102 @@ export default function TryOnPage() {
   };
 
   return (
-    <div>
-      <h2 className="text-2xl font-bold mb-4">試穿室</h2>
-      <div className="grid lg:grid-cols-[1fr_320px] gap-4">
-        <div>
-          <div ref={wrapperRef} className="bg-white p-2 rounded-lg border border-gray-200 max-w-[520px] mx-auto lg:mx-0">
-            <canvas ref={canvasRef} className="block max-w-full" />
-          </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              disabled={!hasSelection}
-              onClick={() => ctrlRef.current?.bringForward()}
-              className="px-3 py-1.5 rounded bg-gray-100 text-sm disabled:opacity-50"
-            >
-              ⬆ 上移一層
-            </button>
-            <button
-              disabled={!hasSelection}
-              onClick={() => ctrlRef.current?.sendBackwards()}
-              className="px-3 py-1.5 rounded bg-gray-100 text-sm disabled:opacity-50"
-            >
-              ⬇ 下移一層
-            </button>
-            <button
-              disabled={!hasSelection}
-              onClick={() => {
-                ctrlRef.current?.removeActive();
-                setHasSelection(false);
-              }}
-              className="px-3 py-1.5 rounded bg-red-500 text-white text-sm disabled:opacity-50"
-            >
-              🗑 從畫布移除
-            </button>
-            <button
-              onClick={handleSave}
-              className="ml-auto px-4 py-1.5 rounded bg-brand-500 text-white text-sm"
-            >
-              💾 儲存穿搭
-            </button>
-          </div>
+    <div className="lg:grid lg:grid-cols-[1fr_320px] lg:gap-4">
+      <div>
+        <div className="flex justify-between items-center mb-3">
+          <h2 className="text-2xl font-bold">試穿室</h2>
+          <button
+            onClick={() => setDrawerOpen(true)}
+            className="lg:hidden bg-brand-500 text-white px-3 py-1.5 rounded text-sm"
+          >
+            👕 選衣物
+          </button>
         </div>
 
-        <aside>
-          <h3 className="font-semibold mb-2">衣物列表</h3>
-          <CategoryTabs categories={categories} active={active} onChange={setActive} />
-          <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-2 gap-2 max-h-[60vh] overflow-y-auto pr-1">
-            {filtered.length === 0 && <p className="text-sm text-gray-500 col-span-full">沒有衣物，請先到「新增衣物」上傳。</p>}
-            {filtered.map((c) => (
-              <button
-                key={c.id}
-                onClick={() => addToCanvas(c)}
-                className="bg-white border border-gray-200 rounded p-1 hover:border-brand-500"
-                title={c.name}
-              >
-                <img src={c.imageBase64} alt={c.name} className="w-full h-20 lg:h-24 object-contain" />
-                <div className="text-[11px] text-gray-600 truncate">{c.name || '未命名'}</div>
-              </button>
-            ))}
-          </div>
-        </aside>
+        <div ref={wrapperRef} className="bg-white p-2 rounded-lg border border-gray-200 inline-block max-w-full">
+          <canvas ref={canvasRef} className="block max-w-full" style={{ touchAction: 'none' }} />
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2 pb-24 lg:pb-0">
+          <button
+            disabled={!hasSelection}
+            onClick={() => ctrlRef.current?.bringForward()}
+            className="px-3 py-1.5 rounded bg-gray-100 text-sm disabled:opacity-50"
+          >
+            ⬆ 上移一層
+          </button>
+          <button
+            disabled={!hasSelection}
+            onClick={() => ctrlRef.current?.sendBackwards()}
+            className="px-3 py-1.5 rounded bg-gray-100 text-sm disabled:opacity-50"
+          >
+            ⬇ 下移一層
+          </button>
+          <button
+            disabled={!hasSelection}
+            onClick={() => {
+              ctrlRef.current?.removeActive();
+              setHasSelection(false);
+            }}
+            className="px-3 py-1.5 rounded bg-red-500 text-white text-sm disabled:opacity-50"
+          >
+            🗑 移除
+          </button>
+          <button onClick={handleSave} className="ml-auto px-4 py-1.5 rounded bg-brand-500 text-white text-sm">
+            💾 儲存穿搭
+          </button>
+        </div>
       </div>
+
+      {/* Desktop sidebar */}
+      <aside className="hidden lg:block">
+        <h3 className="font-semibold mb-2">衣物列表</h3>
+        <CategoryTabs categories={categories} active={active} onChange={setActive} />
+        <div className="grid grid-cols-2 gap-2 max-h-[60vh] overflow-y-auto pr-1">
+          {filtered.length === 0 && <p className="text-sm text-gray-500 col-span-full">沒有衣物，請先到「新增衣物」上傳。</p>}
+          {filtered.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => addToCanvas(c)}
+              className="bg-white border border-gray-200 rounded p-1 hover:border-brand-500"
+              title={c.name}
+            >
+              <img src={c.imageBase64} alt={c.name} className="w-full h-24 object-contain" />
+              <div className="text-[11px] text-gray-600 truncate">{c.name || '未命名'}</div>
+            </button>
+          ))}
+        </div>
+      </aside>
+
+      {/* Mobile bottom drawer */}
+      {drawerOpen && (
+        <>
+          <div className="lg:hidden fixed inset-0 bg-black/40 z-40" onClick={() => setDrawerOpen(false)} />
+          <div className="lg:hidden fixed inset-x-0 bottom-0 z-50 bg-white rounded-t-2xl shadow-xl max-h-[75vh] flex flex-col">
+            <div className="p-3 border-b border-gray-200 flex justify-between items-center">
+              <h3 className="font-semibold">選擇衣物</h3>
+              <button onClick={() => setDrawerOpen(false)} className="text-gray-500 text-2xl leading-none px-2">×</button>
+            </div>
+            <div className="px-3 pt-3">
+              <CategoryTabs categories={categories} active={active} onChange={setActive} />
+            </div>
+            <div className="px-3 pb-4 grid grid-cols-3 sm:grid-cols-4 gap-2 overflow-y-auto">
+              {filtered.length === 0 && <p className="text-sm text-gray-500 col-span-full">沒有衣物，請先到「新增衣物」上傳。</p>}
+              {filtered.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => addToCanvas(c)}
+                  className="bg-white border border-gray-200 rounded p-1 active:border-brand-500"
+                  title={c.name}
+                >
+                  <img src={c.imageBase64} alt={c.name} className="w-full h-20 object-contain" />
+                  <div className="text-[11px] text-gray-600 truncate">{c.name || '未命名'}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
