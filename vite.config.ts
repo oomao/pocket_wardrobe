@@ -36,6 +36,12 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['@imgly/background-removal'],
   },
+  // Some Node-style libraries (e.g. @gradio/client) reference `global` /
+  // `Buffer`. Aliasing `global` to `globalThis` keeps them working in the
+  // browser; the Buffer polyfill lives at the top of src/main.tsx.
+  define: {
+    global: 'globalThis',
+  },
   build: {
     target: 'es2020',
     chunkSizeWarningLimit: 2000,
