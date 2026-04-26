@@ -68,12 +68,13 @@ export interface CategoryBox {
 
 // Where a piece of clothing of each category should land on the mannequin.
 // Coordinates use the SVG viewBox; controller converts to canvas pixels at runtime.
+// Coordinates target the new mannequin SVG (legs end ~432, pedestal below).
 export const CATEGORY_PLACEMENT: Record<string, CategoryBox> = {
-  上衣: { topY: 105, bottomY: 270, leftX: 30, rightX: 170 },
-  外套: { topY: 100, bottomY: 295, leftX: 22, rightX: 178 },
-  連身: { topY: 105, bottomY: 410, leftX: 30, rightX: 170 },
-  下著: { topY: 285, bottomY: 472, leftX: 55, rightX: 145 },
-  鞋子: { topY: 452, bottomY: 482, leftX: 55, rightX: 145 },
+  上衣: { topY: 102, bottomY: 260, leftX: 28, rightX: 172 },
+  外套: { topY: 100, bottomY: 295, leftX: 18, rightX: 182 },
+  連身: { topY: 102, bottomY: 410, leftX: 28, rightX: 172 },
+  下著: { topY: 280, bottomY: 432, leftX: 55, rightX: 145 },
+  鞋子: { topY: 412, bottomY: 432, leftX: 60, rightX: 140 },
   配件: { topY: 130, bottomY: 200, leftX: 75, rightX: 125 },
 };
 

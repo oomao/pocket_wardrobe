@@ -1,39 +1,67 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 500" width="200" height="500">
   <defs>
-    <linearGradient id="bodyF" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#f1f5f9"/>
-      <stop offset="0.45" stop-color="#e2e8f0"/>
-      <stop offset="1" stop-color="#94a3b8"/>
+    <linearGradient id="manqF" x1="0" y1="0" x2="1" y2="0.1">
+      <stop offset="0" stop-color="#fbf6ec"/>
+      <stop offset="0.45" stop-color="#efe6d3"/>
+      <stop offset="1" stop-color="#c9bca0"/>
     </linearGradient>
-    <linearGradient id="headF" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#fde7d0"/>
-      <stop offset="1" stop-color="#e7c7a3"/>
-    </linearGradient>
+    <radialGradient id="hiF" cx="0.3" cy="0.25" r="0.7">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.55"/>
+      <stop offset="0.6" stop-color="#ffffff" stop-opacity="0.05"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="shF" cx="0.7" cy="0.7" r="0.6">
+      <stop offset="0" stop-color="#7d6f55" stop-opacity="0"/>
+      <stop offset="1" stop-color="#7d6f55" stop-opacity="0.18"/>
+    </radialGradient>
   </defs>
-  <!-- Head -->
-  <ellipse cx="100" cy="52" rx="24" ry="30" fill="url(#headF)"/>
+
+  <!-- Floor shadow -->
+  <ellipse cx="100" cy="486" rx="58" ry="6" fill="#000" opacity="0.12"/>
+
+  <!-- Pedestal base -->
+  <ellipse cx="100" cy="478" rx="48" ry="6" fill="url(#manqF)"/>
+  <rect x="96" y="430" width="8" height="50" fill="#9a8d76"/>
+
+  <!-- Head (smooth oval, slightly smaller than male) -->
+  <ellipse cx="100" cy="52" rx="20" ry="28" fill="url(#manqF)"/>
+  <ellipse cx="100" cy="52" rx="20" ry="28" fill="url(#hiF)"/>
+
   <!-- Neck (slimmer) -->
-  <path d="M91 78 Q91 95 84 100 L116 100 Q109 95 109 78 Z" fill="url(#headF)" opacity="0.85"/>
+  <path d="M91 76 Q91 92 86 100 L114 100 Q109 92 109 76 Z" fill="url(#manqF)"/>
+
   <!-- Torso: narrower shoulders, defined waist, fuller hips -->
-  <path d="M62 105
-           Q42 110 42 130
-           L52 200
-           Q55 235 70 245
-           Q60 285 56 320
-           L144 320
-           Q140 285 130 245
-           Q145 235 148 200
+  <path d="M64 102
+           Q44 108 42 130
+           L54 195
+           Q60 220 72 232
+           Q60 270 56 322
+           L144 322
+           Q140 270 128 232
+           Q140 220 146 195
            L158 130
-           Q158 110 138 105 Z"
-        fill="url(#bodyF)"/>
-  <!-- Left arm (slimmer) -->
-  <path d="M46 122 Q34 200 38 298 L54 298 Q58 200 60 122 Z" fill="url(#bodyF)"/>
-  <!-- Right arm (slimmer) -->
-  <path d="M154 122 Q166 200 162 298 L146 298 Q142 200 140 122 Z" fill="url(#bodyF)"/>
-  <!-- Left leg -->
-  <path d="M62 318 Q58 395 70 472 L96 472 L100 322 Z" fill="url(#bodyF)"/>
+           Q156 108 136 102 Z"
+        fill="url(#manqF)"/>
+  <ellipse cx="80" cy="160" rx="18" ry="50" fill="url(#hiF)"/>
+  <ellipse cx="135" cy="240" rx="22" ry="60" fill="url(#shF)"/>
+
+  <!-- Joint hints -->
+  <path d="M64 230 Q100 234 136 230" stroke="#c9bca0" stroke-width="0.6" fill="none" opacity="0.55"/>
+  <path d="M58 320 Q100 326 142 320" stroke="#c9bca0" stroke-width="0.6" fill="none" opacity="0.55"/>
+
+  <!-- Left arm (slimmer, slight gap from torso) -->
+  <path d="M46 118 Q30 200 30 305 Q36 312 50 308 Q56 200 62 122 Z" fill="url(#manqF)"/>
+  <ellipse cx="40" cy="210" rx="5" ry="55" fill="url(#hiF)"/>
+
+  <!-- Right arm -->
+  <path d="M154 118 Q170 200 170 305 Q164 312 150 308 Q144 200 138 122 Z" fill="url(#manqF)"/>
+  <ellipse cx="162" cy="220" rx="5" ry="60" fill="url(#shF)"/>
+
+  <!-- Left leg (slimmer, longer-looking) -->
+  <path d="M62 322 Q58 400 70 432 L97 432 L100 324 Z" fill="url(#manqF)"/>
+  <ellipse cx="76" cy="370" rx="6" ry="40" fill="url(#hiF)"/>
+
   <!-- Right leg -->
-  <path d="M138 318 Q142 395 130 472 L104 472 L100 322 Z" fill="url(#bodyF)"/>
-  <!-- Subtle waist shading -->
-  <ellipse cx="100" cy="180" rx="32" ry="55" fill="#cbd5e1" opacity="0.25"/>
+  <path d="M138 322 Q142 400 130 432 L103 432 L100 324 Z" fill="url(#manqF)"/>
+  <ellipse cx="126" cy="380" rx="6" ry="40" fill="url(#shF)"/>
 </svg>
