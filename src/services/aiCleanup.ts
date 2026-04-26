@@ -32,8 +32,12 @@ export async function aiCleanupViaPuter(
   const base64 = m[2];
 
   onStatus?.('呼叫 Nano Banana…（首次使用需登入 Puter，僅一次）');
+  // Puter API change (2026): must pass provider, and the 2.5 preview model was
+  // deprecated in favour of gemini-3.1-flash-image-preview. The previous shape
+  // produces 'could not resolve app config' on newer Puter builds.
   const result = await w.puter.ai.txt2img(PROMPT, {
-    model: 'gemini-2.5-flash-image-preview',
+    provider: 'gemini',
+    model: 'gemini-3.1-flash-image-preview',
     input_image: base64,
     input_image_mime_type: mime,
   });

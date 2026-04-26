@@ -63,8 +63,12 @@ export async function runPuterTryOn(input: RunPuterTryOnInput): Promise<RunPuter
 
   onStatus?.('inference', 'AI 推論中…（首次使用會跳出 Puter 登入，30 秒搞定）');
   const prompt = PROMPT_TEMPLATE(category, garmentName);
+  // Puter API change (2026): must pass provider, and gemini-2.5-flash-image-
+  // preview was deprecated in favour of gemini-3.1-flash-image-preview.
+  // Without these the SDK throws 'could not resolve app config'.
   const result = await window.puter.ai.txt2img(prompt, {
-    model: 'gemini-2.5-flash-image-preview',
+    provider: 'gemini',
+    model: 'gemini-3.1-flash-image-preview',
     input_image: m[2],
     input_image_mime_type: m[1],
   });
