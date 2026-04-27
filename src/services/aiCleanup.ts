@@ -76,10 +76,9 @@ export async function aiCleanupViaPuter(
 export interface HFCleanupPreset {
   spaceId: string;
   endpoint: string;
-  /** If provided, called with the garment file to build the predict payload.
-   *  Only used by Spaces that need extra params (e.g. try-on Spaces being
-   *  repurposed for single-image cleanup). */
-  buildPayload?: (garment: any) => Record<string, any>;
+  /** Build the predict() payload from the uploaded garment file + prompt.
+   *  Spaces that don't take a prompt simply ignore the second arg. */
+  buildPayload?: (garment: any, prompt: string) => Record<string, any>;
 }
 
 export const CLEANUP_PRESETS: Array<{
@@ -89,45 +88,40 @@ export const CLEANUP_PRESETS: Array<{
   preset: HFCleanupPreset;
   /** ZeroGPU spaces require an HF read token in 2026. */
   needsToken?: boolean;
-  /** Marks repurposed try-on Spaces — output quality may vary. */
-  experimental?: boolean;
 }> = [
   {
-    id: 'ootd',
-    label: 'OOTDiffusion (匿名可用)',
-    description: '原為 try-on 模型，匿名 2.3 秒喚醒可用。cleanup 用法把衣物同時當 person 和 garment 送，效果視衣物而定（實驗性）。',
+    id: 'instantir',
+    label: 'InstantIR (匿名可用)',
+    description: '影像盲修復模型，依 prompt 重建細節並提升畫質。匿名公開、~2 秒喚醒、無須 HF token。實際適合修糊照、改色調、清銳化。',
     preset: {
-      spaceId: 'levihsu/OOTDiffusion',
-      endpoint: '/process_hd',
-      buildPayload: (garment) => ({
-        vton_img: garment,
-        garm_img: garment,
-        n_samples: 1,
-        n_steps: 20,
-        image_scale: 2,
-        seed: -1,
+      spaceId: 'fffiloni/InstantIR',
+      endpoint: '/InstantIR',
+      buildPayload: (garment, prompt) => ({
+        lq: garment,
+        prompt,
+        steps: 20,
+        cfg_scale: 7,
+        guidance_end: 0.6,
+        creative_restoration: 0.5,
       }),
     },
-    experimental: true,
   },
   {
-    id: 'idm-vton',
-    label: 'IDM-VTON (匿名可用)',
-    description: '原為 try-on 模型，匿名可用。cleanup 用法把衣物同時當 person 和 garment（實驗性）。',
+    id: 'finegrain-enhancer',
+    label: 'Finegrain Enhancer (匿名可用)',
+    description: 'Finegrain 影像增強，ControlNet 保留主體輪廓 + prompt 微調細節。匿名公開、無須 HF token。',
     preset: {
-      spaceId: 'yisol/IDM-VTON',
-      endpoint: '/tryon',
-      buildPayload: (garment) => ({
-        dict: { background: garment, layers: [], composite: null },
-        garm_img: garment,
-        garment_des: 'a clean studio product photo of this garment',
-        is_checked: true,
-        is_checked_crop: false,
-        denoise_steps: 20,
+      spaceId: 'finegrain/finegrain-image-enhancer',
+      endpoint: '/process',
+      buildPayload: (garment, prompt) => ({
+        input_image: garment,
+        prompt,
+        negative_prompt: 'blurry, ugly, deformed, distorted, bad anatomy',
         seed: 42,
+        upscale_factor: 1,
+        controlnet_scale: 0.6,
       }),
     },
-    experimental: true,
   },
   {
     id: 'qwen-edit',
@@ -179,7 +173,7 @@ export async function aiCleanupViaHFSpace(
   onStatus?.('AI 推論中（Space 在睡眠時首次喚醒約 30–60 秒）…');
   const promptText = (promptOverride && promptOverride.trim()) || PROMPT;
   const attempts: Array<() => Promise<unknown>> = preset.buildPayload
-    ? [() => client.predict(preset.endpoint, preset.buildPayload!(file))]
+    ? [() => client.predict(preset.endpoint, preset.buildPayload!(file, promptText))]
     : [
         () => client.predict(preset.endpoint, { input_image: file, prompt: promptText }),
         () => client.predict(preset.endpoint, { image: file, prompt: promptText }),

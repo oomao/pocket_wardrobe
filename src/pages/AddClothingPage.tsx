@@ -177,12 +177,10 @@ export default function AddClothingPage() {
   const [bgRemoved, setBgRemoved] = useState(false);
   const [bgBusy, setBgBusy] = useState(false);
   const [cleanupBusy, setCleanupBusy] = useState<null | string>(null);
-  // Default to Puter — most reliable at producing an actual cleaned image
-  // out-of-box (when Puter quota isn't exhausted). OOT/IDM are listed first
-  // in the picker for users who want anonymous-only and are willing to
-  // experiment, but we don't make them the default.
+  // Default to InstantIR — the most "cleanup task"-fitting Space that
+  // is also anonymous-OK in 2026. Falls back gracefully via the picker.
   const [cleanupModelId, setCleanupModelId] = useState<string>(
-    () => localStorage.getItem('pw_cleanup_model') || 'puter',
+    () => localStorage.getItem('pw_cleanup_model') || 'instantir',
   );
   useEffect(() => {
     localStorage.setItem('pw_cleanup_model', cleanupModelId);
@@ -201,17 +199,15 @@ export default function AddClothingPage() {
     icon: string;
     description: string;
     needsToken?: boolean;
-    experimental?: boolean;
   };
-  // Order: anonymous-OK first (experimental but free + zero-setup),
-  // then Puter (free with daily quota), then ZeroGPU options needing token.
+  // Order: anonymous-OK first (no setup, free), then Puter (free with daily
+  // quota), then ZeroGPU options needing token.
   const cleanupOptions: CleanupOption[] = [
-    ...CLEANUP_PRESETS.filter((p) => p.experimental).map((p) => ({
+    ...CLEANUP_PRESETS.filter((p) => !p.needsToken).map((p) => ({
       id: p.id,
       label: p.label,
-      icon: '🧪',
+      icon: '🤗',
       description: p.description,
-      experimental: p.experimental,
     })),
     {
       id: 'puter',
@@ -794,9 +790,14 @@ export default function AddClothingPage() {
                         </p>
                         <p className="text-[11px] text-stone-500 mt-1 leading-relaxed">{o.description}</p>
                       </div>
-                      {o.experimental && (
-                        <span className="shrink-0 text-[10px] bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full">
-                          匿名 / 實驗性
+                      {!o.needsToken && o.id !== 'puter' && (
+                        <span className="shrink-0 text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">
+                          匿名可用
+                        </span>
+                      )}
+                      {o.id === 'puter' && (
+                        <span className="shrink-0 text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
+                          每日有額度
                         </span>
                       )}
                       {o.needsToken && (
@@ -811,9 +812,9 @@ export default function AddClothingPage() {
             </div>
 
             <p className="text-[11px] text-stone-500 leading-relaxed">
-              💡 標 🧪 的兩個 try-on 模型匿名可用、無須 token，但我們把它們「拿去 cleanup 用」是非典型用法（把衣物同時當 person + garment 送），效果視衣物而定。
-              標 🔒 的需 HF Token（兩處共用，於 AI 試穿頁面設定）。
-              不想設定的話用「🎨 本機調色」按鈕。
+              💡 「匿名可用」標籤的兩個 Space 是真正用於影像修復 / 增強的模型，匿名公開 + 無須 token，喚醒約 2 秒。
+              標 🔒 的 Qwen / FLUX 需 HF Token（兩處共用，於 AI 試穿頁面設定）但效果最好。
+              不想等也不想設定的話用「🎨 本機調色」按鈕。
             </p>
 
             <details>
